@@ -13,6 +13,7 @@ import { findExamples } from './sentences.js';
 import { writeJsonOutput } from './output/json.js';
 import { writeMarkdownOutput } from './output/markdown.js';
 import { writeHtmlOutput } from './output/html.js';
+import { writeIndexOutput } from './output/index.js';
 import { generateAudio, resolveProvider } from './tts.js';
 import { resolveTranslationProvider, translateSentence } from './translation.js';
 import path from 'path';
@@ -107,6 +108,7 @@ export async function runPipeline(
   const jsonPath = writeJsonOutput(collectedWords, date, config.output.json);
   const mdPath = writeMarkdownOutput(collectedWords, date, config.output.markdown);
   const htmlPath = writeHtmlOutput(collectedWords, date, config.output.html);
+  writeIndexOutput(collectedWords, date, config.output.html);
 
   // Mark all collected words as seen
   for (const record of collectedWords) {
