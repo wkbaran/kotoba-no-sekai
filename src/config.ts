@@ -17,6 +17,17 @@ const DEFAULTS: AppConfig = {
   database: {
     path: 'output/kotoba.db',
   },
+  tts: {
+    provider: 'auto',
+    openai: {
+      voice: 'alloy',
+      model: 'tts-1',
+    },
+    elevenlabs: {
+      voice_id: 'pFZP5JQG7iQjIQuC4Bku', // "Lily" — multilingual v2 capable
+      model_id: 'eleven_multilingual_v2',
+    },
+  },
 };
 
 function resolvePath(p: string): string {
@@ -38,6 +49,12 @@ export function loadConfig(configPath = 'config.yaml'): AppConfig {
     ...raw,
     output: { ...DEFAULTS.output, ...(raw.output ?? {}) },
     database: { ...DEFAULTS.database, ...(raw.database ?? {}) },
+    tts: {
+      ...DEFAULTS.tts,
+      ...(raw.tts ?? {}),
+      openai: { ...DEFAULTS.tts.openai, ...(raw.tts?.openai ?? {}) },
+      elevenlabs: { ...DEFAULTS.tts.elevenlabs, ...(raw.tts?.elevenlabs ?? {}) },
+    },
   };
 
   const validLevels = ['beginner', 'intermediate', 'advanced', 'all'];
@@ -79,6 +96,9 @@ export function ensureOutputDirs(config: AppConfig): void {
   // Ensure DB parent dir exists
   const dbDir = path.dirname(resolvePath(config.database.path));
   fs.mkdirSync(dbDir, { recursive: true });
+
+  // Ensure audio dir exists inside html output dir
+  fs.mkdirSync(path.join(resolvePath(config.output.html), 'audio'), { recursive: true });
 }
 
 export function resolveOutputPath(dir: string, filename: string): string {

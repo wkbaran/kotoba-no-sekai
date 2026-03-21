@@ -13,6 +13,8 @@ import { findExamples } from './sentences.js';
 import { writeJsonOutput } from './output/json.js';
 import { writeMarkdownOutput } from './output/markdown.js';
 import { writeHtmlOutput } from './output/html.js';
+import { generateAudio, resolveProvider } from './tts.js';
+import path from 'path';
 
 export interface PipelineResult {
   wordsCollected: number;
@@ -66,7 +68,27 @@ export async function runPipeline(
     };
   }
 
-  console.log(`[pipeline] Collected ${collectedWords.length} word(s). Writing outputs...`);
+  console.log(`[pipeline] Collected ${collectedWords.length} word(s). Generating audio...`);
+
+  // Generate TTS audio files
+  const ttsProvider = resolveProvider(config);
+  if (ttsProvider !== 'browser') {
+    const htmlDir = path.resolve(process.cwd(), config.output.html);
+    for (let i = 0; i < collectedWords.length; i++) {
+      const result = await generateAudio(collectedWords[i], i, config, htmlDir);
+      if (result) {
+        collectedWords[i].wordAudioFile = result.wordAudioFile;
+        collectedWords[i].audioProvider = result.provider;
+        for (let j = 0; j < result.exampleAudioFiles.length; j++) {
+          if (collectedWords[i].examples[j]) {
+            collectedWords[i].examples[j].audioFile = result.exampleAudioFiles[j];
+          }
+        }
+      }
+    }
+  }
+
+  console.log(`[pipeline] Writing outputs...`);
 
   // Write outputs
   const jsonPath = writeJsonOutput(collectedWords, date, config.output.json);

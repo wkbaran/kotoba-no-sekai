@@ -4,6 +4,7 @@
 
 export type Level = 'beginner' | 'intermediate' | 'advanced' | 'all';
 export type JlptLevel = 'N5' | 'N4' | 'N3' | 'N2' | 'N1' | 'unknown';
+export type TtsProvider = 'auto' | 'openai' | 'elevenlabs' | 'browser' | 'disabled';
 
 // ── Config ──────────────────────────────────────────────
 
@@ -20,6 +21,17 @@ export interface AppConfig {
   };
   database: {
     path: string;
+  };
+  tts: {
+    provider: TtsProvider;
+    openai: {
+      voice: string;
+      model: string;
+    };
+    elevenlabs: {
+      voice_id: string;
+      model_id: string;
+    };
   };
 }
 
@@ -58,6 +70,8 @@ export interface ExampleSentence {
   /** Plain text version (no HTML tags) */
   plain: string;
   sourceUrl: string;
+  /** Relative path from output/web/ to generated audio file, if any */
+  audioFile?: string;
 }
 
 export interface WordRecord {
@@ -81,6 +95,10 @@ export interface WordRecord {
   jlptLevel: JlptLevel;
   /** ISO date string of the run */
   date: string;
+  /** Relative path from output/web/ to word pronunciation audio file, if any */
+  wordAudioFile?: string;
+  /** Which TTS provider generated the audio (for display purposes) */
+  audioProvider?: 'openai' | 'elevenlabs';
 }
 
 // ── Anki-compatible JSON schema ───────────────────────────

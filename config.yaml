@@ -31,3 +31,24 @@ output:
 # SQLite database path for deduplication tracking.
 database:
   path: output/kotoba.db
+
+# Text-to-speech configuration.
+# API keys are read from environment variables: OPENAI_API_KEY, ELEVENLABS_API_KEY
+#
+# provider: auto        → ElevenLabs if key set, else OpenAI if key set, else browser
+#           openai      → OpenAI TTS (requires OPENAI_API_KEY)
+#           elevenlabs  → ElevenLabs TTS (requires ELEVENLABS_API_KEY)
+#           browser     → Web Speech API only, no files generated
+#           disabled    → no audio
+tts:
+  provider: auto
+
+  openai:
+    voice: alloy      # alloy | echo | fable | onyx | nova | shimmer
+    model: tts-1      # tts-1 | tts-1-hd (higher quality, slower)
+
+  elevenlabs:
+    # "Lily" — ElevenLabs multilingual v2, good Japanese pronunciation
+    # Find voice IDs at: https://elevenlabs.io/voice-library
+    voice_id: pFZP5JQG7iQjIQuC4Bku
+    model_id: eleven_multilingual_v2
