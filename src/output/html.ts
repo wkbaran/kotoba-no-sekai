@@ -2,18 +2,8 @@ import fs from 'fs';
 import type { WordRecord, JlptLevel } from '../types.js';
 import { resolveOutputPath } from '../config.js';
 
-const JLPT_COLORS: Record<JlptLevel, { bg: string; fg: string; border: string }> = {
-  N5:      { bg: '#e8f5e9', fg: '#2e7d32', border: '#4caf50' },
-  N4:      { bg: '#f1f8e9', fg: '#558b2f', border: '#8bc34a' },
-  N3:      { bg: '#fff8e1', fg: '#f57f17', border: '#ffc107' },
-  N2:      { bg: '#fff3e0', fg: '#e65100', border: '#ff9800' },
-  N1:      { bg: '#fce4ec', fg: '#c62828', border: '#ef5350' },
-  unknown: { bg: '#f5f5f5', fg: '#616161', border: '#9e9e9e' },
-};
-
 function jlptBadge(level: JlptLevel): string {
-  const c = JLPT_COLORS[level];
-  return `<span class="badge" style="background:${c.bg};color:${c.fg};border-color:${c.border}">${level}</span>`;
+  return `<span class="badge badge-jlpt badge-${level.toLowerCase()}">${level}</span>`;
 }
 
 function domainBadge(domain: string): string {
@@ -21,7 +11,6 @@ function domainBadge(domain: string): string {
 }
 
 function renderCard(record: WordRecord): string {
-  const color = JLPT_COLORS[record.jlptLevel];
   const examples = record.examples.map(ex => {
     // Wrap the marked sentence in a link to the source
     const linked = ex.markedHtml.replace(
@@ -36,7 +25,7 @@ function renderCard(record: WordRecord): string {
     : '';
 
   return `
-  <article class="word-card" style="border-left-color:${color.border}">
+  <article class="word-card card-${record.jlptLevel.toLowerCase()}">
     <div class="card-header">
       <div class="word-main">
         <span class="word-kanji">${record.word}</span>
@@ -68,14 +57,62 @@ function buildPage(records: WordRecord[], date: string): string {
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Dark theme (default) ── */
     :root {
-      --surface:  #ffffff;
-      --bg:       #f8f9fa;
-      --text:     #212529;
-      --muted:    #6c757d;
-      --accent:   #5c6bc0;
-      --radius:   10px;
-      --shadow:   0 2px 8px rgba(0,0,0,.08);
+      --surface:      #1e1e2e;
+      --bg:           #13131f;
+      --text:         #cdd6f4;
+      --muted:        #6c7086;
+      --accent:       #89b4fa;
+      --example-bg:   #181825;
+      --example-border: #313244;
+      --example-text: #bac2de;
+      --mark-bg:      #f9e2af33;
+      --mark-hover:   #f9e2af66;
+      --shadow:       0 2px 12px rgba(0,0,0,.4);
+      --radius:       10px;
+
+      /* JLPT badge colors — dark */
+      --n5-bg: #1a3a2a; --n5-fg: #a6e3a1; --n5-border: #40a02b;
+      --n4-bg: #1e3a1e; --n4-fg: #94e2d5; --n4-border: #179299;
+      --n3-bg: #3a2e0a; --n3-fg: #f9e2af; --n3-border: #df8e1d;
+      --n2-bg: #3a1a0a; --n2-fg: #fab387; --n2-border: #fe640b;
+      --n1-bg: #3a0f0f; --n1-fg: #f38ba8; --n1-border: #d20f39;
+      --uk-bg: #232634; --uk-fg: #a6adc8; --uk-border: #45475a;
+
+      /* card accent borders */
+      --card-n5: #40a02b; --card-n4: #179299; --card-n3: #df8e1d;
+      --card-n2: #fe640b; --card-n1: #d20f39; --card-uk: #45475a;
+
+      /* domain badge */
+      --domain-bg: #1e2a45; --domain-fg: #89b4fa; --domain-border: #3b5998;
+    }
+
+    /* ── Light theme ── */
+    [data-theme="light"] {
+      --surface:      #ffffff;
+      --bg:           #f8f9fa;
+      --text:         #212529;
+      --muted:        #6c757d;
+      --accent:       #5c6bc0;
+      --example-bg:   #f1f3f5;
+      --example-border: #dee2e6;
+      --example-text: #343a40;
+      --mark-bg:      #fff9c4;
+      --mark-hover:   #ffe082;
+      --shadow:       0 2px 8px rgba(0,0,0,.08);
+
+      --n5-bg: #e8f5e9; --n5-fg: #2e7d32; --n5-border: #4caf50;
+      --n4-bg: #f1f8e9; --n4-fg: #558b2f; --n4-border: #8bc34a;
+      --n3-bg: #fff8e1; --n3-fg: #f57f17; --n3-border: #ffc107;
+      --n2-bg: #fff3e0; --n2-fg: #e65100; --n2-border: #ff9800;
+      --n1-bg: #fce4ec; --n1-fg: #c62828; --n1-border: #ef5350;
+      --uk-bg: #f5f5f5; --uk-fg: #616161; --uk-border: #9e9e9e;
+
+      --card-n5: #4caf50; --card-n4: #8bc34a; --card-n3: #ffc107;
+      --card-n2: #ff9800; --card-n1: #ef5350; --card-uk: #9e9e9e;
+
+      --domain-bg: #e8eaf6; --domain-fg: #3949ab; --domain-border: #7986cb;
     }
 
     body {
@@ -84,11 +121,14 @@ function buildPage(records: WordRecord[], date: string): string {
       color: var(--text);
       line-height: 1.7;
       padding: 2rem 1rem;
+      transition: background .25s, color .25s;
     }
 
+    /* ── Header ── */
     .site-header {
       text-align: center;
       margin-bottom: 2.5rem;
+      position: relative;
     }
 
     .site-title {
@@ -104,6 +144,24 @@ function buildPage(records: WordRecord[], date: string): string {
       margin-top: .25rem;
     }
 
+    .theme-toggle {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--surface);
+      border: 1px solid var(--example-border);
+      color: var(--muted);
+      border-radius: 20px;
+      padding: .3em .75em;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: color .2s, border-color .2s;
+    }
+
+    .theme-toggle:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── Grid ── */
     .word-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -112,18 +170,24 @@ function buildPage(records: WordRecord[], date: string): string {
       margin: 0 auto;
     }
 
+    /* ── Cards ── */
     .word-card {
       background: var(--surface);
       border-radius: var(--radius);
-      border-left: 4px solid #ccc;
+      border-left: 4px solid var(--card-uk);
       padding: 1.25rem 1.5rem;
       box-shadow: var(--shadow);
-      transition: box-shadow .2s;
+      transition: box-shadow .2s, background .25s;
     }
 
-    .word-card:hover {
-      box-shadow: 0 4px 16px rgba(0,0,0,.12);
-    }
+    .word-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.3); }
+
+    .card-n5 { border-left-color: var(--card-n5); }
+    .card-n4 { border-left-color: var(--card-n4); }
+    .card-n3 { border-left-color: var(--card-n3); }
+    .card-n2 { border-left-color: var(--card-n2); }
+    .card-n1 { border-left-color: var(--card-n1); }
+    .card-unknown { border-left-color: var(--card-uk); }
 
     .card-header {
       display: flex;
@@ -140,16 +204,10 @@ function buildPage(records: WordRecord[], date: string): string {
       flex-wrap: wrap;
     }
 
-    .word-kanji {
-      font-size: 1.75rem;
-      font-weight: 700;
-    }
+    .word-kanji  { font-size: 1.75rem; font-weight: 700; }
+    .word-reading { font-size: 1rem; color: var(--muted); }
 
-    .word-reading {
-      font-size: 1rem;
-      color: var(--muted);
-    }
-
+    /* ── Badges ── */
     .badges {
       display: flex;
       gap: .35rem;
@@ -164,64 +222,48 @@ function buildPage(records: WordRecord[], date: string): string {
       font-weight: 700;
       padding: .2em .55em;
       border-radius: 4px;
-      border: 1px solid currentColor;
+      border: 1px solid;
       letter-spacing: .04em;
       text-transform: uppercase;
     }
 
-    .badge-domain {
-      background: #e8eaf6;
-      color: #3949ab;
-      border-color: #7986cb;
-    }
+    .badge-n5      { background: var(--n5-bg); color: var(--n5-fg); border-color: var(--n5-border); }
+    .badge-n4      { background: var(--n4-bg); color: var(--n4-fg); border-color: var(--n4-border); }
+    .badge-n3      { background: var(--n3-bg); color: var(--n3-fg); border-color: var(--n3-border); }
+    .badge-n2      { background: var(--n2-bg); color: var(--n2-fg); border-color: var(--n2-border); }
+    .badge-n1      { background: var(--n1-bg); color: var(--n1-fg); border-color: var(--n1-border); }
+    .badge-unknown { background: var(--uk-bg); color: var(--uk-fg); border-color: var(--uk-border); }
+    .badge-domain  { background: var(--domain-bg); color: var(--domain-fg); border-color: var(--domain-border); }
 
-    .pos {
-      font-size: .8rem;
-      color: var(--muted);
-      margin-bottom: .3rem;
-      font-style: italic;
-    }
+    /* ── Word info ── */
+    .pos        { font-size: .8rem; color: var(--muted); margin-bottom: .3rem; font-style: italic; }
+    .definition { font-size: 1.05rem; font-weight: 500; margin-bottom: .25rem; }
+    .alt-defs   { font-size: .85rem; color: var(--muted); margin-bottom: .5rem; }
 
-    .definition {
-      font-size: 1.05rem;
-      font-weight: 500;
-      margin-bottom: .25rem;
-    }
-
-    .alt-defs {
-      font-size: .85rem;
-      color: var(--muted);
-      margin-bottom: .5rem;
-    }
-
+    /* ── Examples ── */
     .example {
       margin-top: .75rem;
       padding: .6rem 1rem;
-      background: var(--bg);
-      border-left: 3px solid #dee2e6;
+      background: var(--example-bg);
+      border-left: 3px solid var(--example-border);
       border-radius: 0 var(--radius) var(--radius) 0;
       font-size: .95rem;
-      color: #343a40;
+      color: var(--example-text);
+      transition: background .25s;
     }
 
     .example mark {
-      background: #fff9c4;
+      background: var(--mark-bg);
       color: inherit;
       border-radius: 2px;
       padding: 0 2px;
       font-weight: 700;
     }
 
-    .source-link {
-      color: inherit;
-      text-decoration: none;
-    }
+    .source-link { color: inherit; text-decoration: none; }
+    .source-link:hover mark { background: var(--mark-hover); text-decoration: underline; }
 
-    .source-link:hover mark {
-      background: #ffe082;
-      text-decoration: underline;
-    }
-
+    /* ── Footer ── */
     .site-footer {
       text-align: center;
       margin-top: 3rem;
@@ -234,6 +276,7 @@ function buildPage(records: WordRecord[], date: string): string {
   <header class="site-header">
     <h1 class="site-title">言葉の世界</h1>
     <p class="site-subtitle">${date} · ${records.length} word${records.length !== 1 ? 's' : ''}</p>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">☀ Light</button>
   </header>
 
   <div class="word-grid">
@@ -243,6 +286,29 @@ function buildPage(records: WordRecord[], date: string): string {
   <footer class="site-footer">
     <p>Generated by <strong>Kotoba no Sekai</strong> on ${date}</p>
   </footer>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('themeToggle');
+      var stored = localStorage.getItem('kotoba-theme');
+      if (stored === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        btn.textContent = '🌙 Dark';
+      }
+      btn.addEventListener('click', function () {
+        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        if (isLight) {
+          document.documentElement.removeAttribute('data-theme');
+          btn.textContent = '☀ Light';
+          localStorage.setItem('kotoba-theme', 'dark');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'light');
+          btn.textContent = '🌙 Dark';
+          localStorage.setItem('kotoba-theme', 'light');
+        }
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }
