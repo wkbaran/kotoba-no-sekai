@@ -53,7 +53,7 @@ export function findExamples(
     results.push({
       markedHtml,
       plain: sentence,
-      sourceUrl,
+      sourceUrl: sourceUrl + '#:~:text=' + encodeURIComponent(matchedTarget),
     });
   }
 
