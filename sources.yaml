@@ -1,0 +1,55 @@
+# Kotoba no Sekai — RSS Feed Sources
+#
+# Each feed needs:
+#   url:     Full RSS/Atom feed URL
+#   domain:  Tag applied to every word found in this feed (e.g. news, science, food)
+#   name:    Human-readable label (used in logs and output)
+#   enabled: Set to false to temporarily disable without deleting the entry
+#
+# Bootstrap suggestions — uncomment and verify URLs before use:
+#
+# NHK Web Easy (simplified news, great for beginners):
+#   url: https://www3.nhk.or.jp/news/easy/k10012345678000/k10012345678000.rss
+#   domain: news
+#   name: NHK Web Easy
+#
+# NHK News (standard news, N3–N1 vocabulary):
+#   url: https://www3.nhk.or.jp/rss/news/cat0.xml
+#   domain: news
+#   name: NHK News
+#
+# NHK Science & Culture:
+#   url: https://www3.nhk.or.jp/rss/news/cat5.xml
+#   domain: science
+#   name: NHK Science & Culture
+#
+# NHK Life & Society:
+#   url: https://www3.nhk.or.jp/rss/news/cat1.xml
+#   domain: society
+#   name: NHK Life & Society
+#
+# Asahi Shimbun (free tier, registration may be required):
+#   url: https://www.asahi.com/rss/asahi/newsheadlines.rdf
+#   domain: news
+#   name: Asahi Shimbun
+#
+# Wikipedia Japanese (Today's featured article feed):
+#   url: https://ja.wikipedia.org/w/api.php?action=featuredfeed&feed=featured&feedformat=atom&language=ja
+#   domain: general
+#   name: Wikipedia JP Featured
+
+feeds:
+  - url: https://www3.nhk.or.jp/rss/news/cat0.xml
+    domain: news
+    name: NHK News
+    enabled: true
+
+  - url: https://www3.nhk.or.jp/rss/news/cat5.xml
+    domain: science
+    name: NHK Science & Culture
+    enabled: true
+
+  - url: https://www3.nhk.or.jp/rss/news/cat1.xml
+    domain: society
+    name: NHK Life & Society
+    enabled: true

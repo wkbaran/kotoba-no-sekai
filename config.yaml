@@ -1,0 +1,33 @@
+# Kotoba no Sekai — Configuration
+
+# Vocabulary difficulty level to collect.
+# Follows JLPT bands:
+#   beginner     → N5 / N4
+#   intermediate → N3
+#   advanced     → N2 / N1
+#   all          → no level filter (includes words with no JLPT tag)
+level: beginner
+
+# Maximum number of new words to collect per run.
+max_words_per_run: 4
+
+# Maximum number of example sentences to attach to each word.
+# If fewer are found in the source article, the word is still included.
+max_examples_per_word: 2
+
+# Minimum length (in characters) for a candidate word's surface form.
+# Filters out single-character noise like particles that slip through POS filtering.
+min_word_length: 2
+
+# Delay between Jisho API calls in milliseconds. Be courteous to the free API.
+jisho_delay_ms: 600
+
+# Output directories (relative to working directory, or absolute).
+output:
+  json: output/data
+  html: output/web
+  markdown: output/web
+
+# SQLite database path for deduplication tracking.
+database:
+  path: output/kotoba.db
