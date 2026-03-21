@@ -28,7 +28,10 @@ function renderCard(record: WordRecord): string {
     const audioEl = ex.audioFile
       ? `<audio class="audio-ex" data-index="${i}" src="${ex.audioFile}" preload="none"></audio>`
       : '';
-    return `<blockquote class="example" data-text="${escapeAttr(ex.plain)}" data-index="${i}">${linked}${audioEl}</blockquote>`;
+    const translationEl = ex.translation
+      ? `<p class="example-translation">${escapeAttr(ex.translation)}</p>`
+      : '';
+    return `<blockquote class="example" data-text="${escapeAttr(ex.plain)}" data-index="${i}">${linked}${audioEl}${translationEl}</blockquote>`;
   }).join('\n');
 
   const altDefs = record.altDefinitions.length > 0
@@ -279,6 +282,13 @@ function buildPage(records: WordRecord[], date: string): string {
     .pos        { font-size: .8rem; color: var(--muted); margin-bottom: .3rem; font-style: italic; }
     .definition { font-size: 1.05rem; font-weight: 500; margin-bottom: .25rem; }
     .alt-defs   { font-size: .85rem; color: var(--muted); margin-bottom: .5rem; }
+
+    .example-translation {
+      margin-top: .4rem;
+      font-size: .85rem;
+      color: var(--muted);
+      font-style: italic;
+    }
 
     /* ── Examples ── */
     .example {

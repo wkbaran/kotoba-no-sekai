@@ -28,6 +28,14 @@ const DEFAULTS: AppConfig = {
       model_id: 'eleven_multilingual_v2',
     },
   },
+  translation: {
+    provider: 'auto',
+    ollama: {
+      url: 'http://localhost:11434',
+      model: 'qwen2.5:3b',
+    },
+    google: {},
+  },
 };
 
 function resolvePath(p: string): string {
@@ -54,6 +62,12 @@ export function loadConfig(configPath = 'config.yaml'): AppConfig {
       ...(raw.tts ?? {}),
       openai: { ...DEFAULTS.tts.openai, ...(raw.tts?.openai ?? {}) },
       elevenlabs: { ...DEFAULTS.tts.elevenlabs, ...(raw.tts?.elevenlabs ?? {}) },
+    },
+    translation: {
+      ...DEFAULTS.translation,
+      ...(raw.translation ?? {}),
+      ollama: { ...DEFAULTS.translation.ollama, ...(raw.translation?.ollama ?? {}) },
+      google: {},
     },
   };
 

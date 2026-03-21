@@ -14,6 +14,7 @@ import { writeJsonOutput } from './output/json.js';
 import { writeMarkdownOutput } from './output/markdown.js';
 import { writeHtmlOutput } from './output/html.js';
 import { generateAudio, resolveProvider } from './tts.js';
+import { resolveTranslationProvider, translateSentence } from './translation.js';
 import path from 'path';
 
 export interface PipelineResult {
@@ -84,6 +85,18 @@ export async function runPipeline(
             collectedWords[i].examples[j].audioFile = result.exampleAudioFiles[j];
           }
         }
+      }
+    }
+  }
+
+  // Translate example sentences
+  const translationProvider = await resolveTranslationProvider(config);
+  if (translationProvider !== 'disabled') {
+    console.log(`[pipeline] Translating examples (${translationProvider})...`);
+    for (const record of collectedWords) {
+      for (const example of record.examples) {
+        const translation = await translateSentence(example.plain, translationProvider, config);
+        if (translation) example.translation = translation;
       }
     }
   }

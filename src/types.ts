@@ -5,6 +5,7 @@
 export type Level = 'beginner' | 'intermediate' | 'advanced' | 'all';
 export type JlptLevel = 'N5' | 'N4' | 'N3' | 'N2' | 'N1' | 'unknown';
 export type TtsProvider = 'auto' | 'openai' | 'elevenlabs' | 'browser' | 'disabled';
+export type TranslationProvider = 'auto' | 'ollama' | 'google' | 'disabled';
 
 // ── Config ──────────────────────────────────────────────
 
@@ -31,6 +32,16 @@ export interface AppConfig {
     elevenlabs: {
       voice_id: string;
       model_id: string;
+    };
+  };
+  translation: {
+    provider: TranslationProvider;
+    ollama: {
+      url: string;
+      model: string;
+    };
+    google: {
+      // API key read from GOOGLE_API_KEY env var
     };
   };
 }
@@ -72,6 +83,8 @@ export interface ExampleSentence {
   sourceUrl: string;
   /** Relative path from output/web/ to generated audio file, if any */
   audioFile?: string;
+  /** English translation of the example sentence */
+  translation?: string;
 }
 
 export interface WordRecord {

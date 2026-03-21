@@ -52,3 +52,20 @@ tts:
     # Find voice IDs at: https://elevenlabs.io/voice-library
     voice_id: pFZP5JQG7iQjIQuC4Bku
     model_id: eleven_multilingual_v2
+
+# Translation configuration.
+# Google API key read from GOOGLE_API_KEY env var.
+#
+# provider: auto     → Ollama if reachable, else Google if key set, else disabled
+#           ollama   → local Ollama instance (no API key needed)
+#           google   → Google Cloud Translation API (requires GOOGLE_API_KEY)
+#           disabled → no translation
+translation:
+  provider: auto
+
+  ollama:
+    url: http://localhost:11434
+    # Any model with good multilingual support works.
+    # Qwen2.5 series is excellent for Japanese → English.
+    # Other good options: gemma3:4b, mistral:7b, llama3.2:3b
+    model: qwen2.5:3b
