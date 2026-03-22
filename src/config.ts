@@ -118,3 +118,15 @@ export function ensureOutputDirs(config: AppConfig): void {
 export function resolveOutputPath(dir: string, filename: string): string {
   return path.join(resolvePath(dir), filename);
 }
+
+/**
+ * Returns a unique slug for this run's output files.
+ * If digest-YYYY-MM-DD.html already exists, appends -2, -3, etc.
+ */
+export function resolveRunSlug(date: string, htmlOutputDir: string): string {
+  const dir = resolvePath(htmlOutputDir);
+  if (!fs.existsSync(path.join(dir, `digest-${date}.html`))) return date;
+  let n = 2;
+  while (fs.existsSync(path.join(dir, `digest-${date}-${n}.html`))) n++;
+  return `${date}-${n}`;
+}

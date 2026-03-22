@@ -12,7 +12,7 @@
  *   kotoba --help
  */
 
-import { loadConfig, loadSources, ensureOutputDirs } from './config.js';
+import { loadConfig, loadSources, ensureOutputDirs, resolveRunSlug } from './config.js';
 import { runPipeline } from './pipeline.js';
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -111,9 +111,10 @@ async function main(): Promise<void> {
   }
 
   ensureOutputDirs(config);
+  const slug = resolveRunSlug(date, config.output.html);
 
   try {
-    const result = await runPipeline(config, feeds, date);
+    const result = await runPipeline(config, feeds, slug);
 
     if (result.wordsCollected === 0) {
       console.log('\n  No new words this run. Try a different level or add more feeds.\n');
