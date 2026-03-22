@@ -8,7 +8,7 @@ Fetches articles from a configurable set of RSS feeds, extracts vocabulary, look
 
 ## Outputs
 
-Each run produces three files named by date:
+Each run produces files named by date:
 
 | File | Description |
 |------|-------------|
@@ -16,7 +16,15 @@ Each run produces three files named by date:
 | `output/web/digest-YYYY-MM-DD.md` | Markdown reading digest with glossed examples |
 | `output/web/digest-YYYY-MM-DD.html` | Self-contained HTML page, readable immediately in a browser |
 
-The HTML page links each highlighted example word directly to its source article.
+Three index pages are maintained automatically:
+
+| File | Description |
+|------|-------------|
+| `output/web/index.html` | Chronological archive of all daily/automated runs |
+| `output/web/manual.html` | Chronological archive of all manual runs (`--word`, `--source`, `--url`) |
+| `output/web/words.html` | Master word list, sorted A–Z by English definition, with JLPT level badges |
+
+All three index pages include a nav bar linking between them. Running `--rebuild-index` regenerates all three from the existing manifests and digest files.
 
 ---
 
@@ -60,16 +68,39 @@ Copy `.env.example` to `.env` and fill in the ones you want.
 ## Usage
 
 ```bash
-# Standard run (loads .env automatically if present)
+# Standard run — collects max_words_per_run words from shuffled feeds
 npm start
 
-# Or invoke directly with flags
+# Override level or word count
 node --env-file-if-exists=.env dist/index.js --level intermediate
 node --env-file-if-exists=.env dist/index.js --max 10
+
+# Manual modes — produce a 1-word digest on manual.html
+node --env-file-if-exists=.env dist/index.js --word 食べる          # search all feeds for this word
+node --env-file-if-exists=.env dist/index.js --source "NHK News"    # pick a word from a named source
+node --env-file-if-exists=.env dist/index.js --url https://...      # pick a word from any article URL
+
+# Utilities
+node --env-file-if-exists=.env dist/index.js --dry-run              # show candidates without writing output
+node --env-file-if-exists=.env dist/index.js --rebuild-index        # regenerate index.html / manual.html / words.html
 node --env-file-if-exists=.env dist/index.js --config path/to/config.yaml --sources path/to/sources.yaml
-node --env-file-if-exists=.env dist/index.js --dry-run
 node --env-file-if-exists=.env dist/index.js --help
 ```
+
+---
+
+## Word Selection Algorithm
+
+On a standard run the pipeline:
+
+1. Fetches all articles from all enabled feeds and shuffles them together into a single flat list (feeds are shuffled first, then articles within each feed, then the combined list is shuffled again for maximum topic variety).
+2. Iterates through the list one article at a time. For each article it tokenizes the text, then walks the candidate tokens in order checking: not already in the SQLite deduplication DB → Jisho lookup succeeds → JLPT level matches the configured level → at least one example sentence is found. The first candidate to pass all checks becomes a collected word.
+3. At most one word is taken per article, then the pipeline advances to the next article for the next word. This ensures each collected word comes from a different topic.
+4. Stops once `max_words_per_run` words are collected.
+
+For **`--word`** the pipeline searches every article (each at most once) for any surface form of the target word using the tokenizer's base form. JLPT level and deduplication checks are skipped — you always get the word you asked for if it appears anywhere in the feeds.
+
+For **`--source`** and **`--url`** the same per-article logic applies but restricted to a single source or fetched URL, collecting one word.
 
 ---
 
@@ -107,7 +138,7 @@ Set `enabled: false` to disable a feed without deleting it. The file ships with 
 
 ## Deduplication
 
-Words are tracked in a local SQLite database (`output/kotoba.db`). A word is skipped on subsequent runs unless a richer example sentence is available. The database and all output files are excluded from version control.
+Words are tracked in a local SQLite database (`output/kotoba.db`). A word is skipped on subsequent runs once it has been seen. The database and all output files are excluded from version control.
 
 ---
 
@@ -157,7 +188,7 @@ Each word in the JSON output:
   "sourceUrl": "https://...",
   "domain": "science",
   "jlptLevel": "N4",
-  "date": "2026-03-21"
+  "date": "2026-03-22"
 }
 ```
 
