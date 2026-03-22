@@ -97,7 +97,6 @@ Resources:
         DefaultRootObject: index.html
         HttpVersion: http2
         PriceClass: PriceClass_100   # US/Europe/Asia — cheapest tier
-        Compress: true
 
         Origins:
           - Id: S3Origin
@@ -112,6 +111,7 @@ Resources:
           # AWS managed CachingOptimized policy — caches aggressively, good for static files
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           AllowedMethods: [GET, HEAD]
+          Compress: true
 
         # Map S3 403 (object not found in private bucket) → HTTP 404
         CustomErrorResponses:
