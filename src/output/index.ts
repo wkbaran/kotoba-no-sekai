@@ -33,6 +33,21 @@ function saveManifest(outputDir: string, entries: ManifestEntry[]): void {
 function upsertManifest(outputDir: string, entry: ManifestEntry): ManifestEntry[] {
   const entries = loadManifest(outputDir).filter(e => e.date !== entry.date);
   entries.push(entry);
+
+  // Also pick up any digest-*.html files on disk that aren't in the manifest yet
+  // (e.g. from runs before the index feature existed, or after a manifest reset)
+  const resolvedDir = path.resolve(process.cwd(), outputDir);
+  try {
+    const known = new Set(entries.map(e => e.date));
+    for (const f of fs.readdirSync(resolvedDir)) {
+      const m = f.match(/^digest-(\d{4}-\d{2}-\d{2})\.html$/);
+      if (m && !known.has(m[1])) {
+        entries.push({ date: m[1], wordCount: 0, words: [], file: f });
+        known.add(m[1]);
+      }
+    }
+  } catch { /* output dir may not exist yet on very first run */ }
+
   // Sort newest first
   entries.sort((a, b) => b.date.localeCompare(a.date));
   saveManifest(outputDir, entries);
