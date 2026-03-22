@@ -14,6 +14,7 @@
 
 import { loadConfig, loadSources, ensureOutputDirs, resolveRunSlug } from './config.js';
 import { runPipeline } from './pipeline.js';
+import { rebuildIndexOutput } from './output/index.js';
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const args: Record<string, string | boolean> = {};
@@ -23,6 +24,8 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
       args.help = true;
     } else if (arg === '--dry-run') {
       args['dry-run'] = true;
+    } else if (arg === '--rebuild-index') {
+      args['rebuild-index'] = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const next = argv[i + 1];
@@ -50,6 +53,7 @@ OPTIONS
   --level   <level>   Override difficulty level    (beginner|intermediate|advanced|all)
   --max     <n>       Override max words per run
   --dry-run           Print candidates without writing output or updating DB
+  --rebuild-index     Rebuild index.html from existing digest files, then exit
   --help, -h          Show this help
 
 OUTPUTS (written to paths configured in config.yaml)
@@ -103,6 +107,11 @@ async function main(): Promise<void> {
   console.log('  言葉の世界 — World of Words');
   console.log(`  ${date}  |  level: ${config.level}  |  feeds: ${feeds.length}`);
   console.log('');
+
+  if (args['rebuild-index']) {
+    rebuildIndexOutput(config.output.html);
+    return;
+  }
 
   if (args['dry-run']) {
     console.log('[dry-run] Fetching articles and extracting candidates only...');

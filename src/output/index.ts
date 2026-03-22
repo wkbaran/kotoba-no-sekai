@@ -320,3 +320,34 @@ export function writeIndexOutput(
   fs.writeFileSync(indexPath, html, 'utf8');
   console.log(`[output] Index → ${indexPath}`);
 }
+
+/**
+ * Rebuild the index from the existing manifest + any digest HTML files on disk,
+ * without adding a new run entry. Useful for recovering a lost or stale index.
+ */
+export function rebuildIndexOutput(outputDir: string): void {
+  const resolvedDir = path.resolve(process.cwd(), outputDir);
+  const entries = loadManifest(outputDir);
+  const known = new Set(entries.map(e => e.date));
+
+  try {
+    for (const f of fs.readdirSync(resolvedDir)) {
+      const m = f.match(/^digest-(\d{4}-\d{2}-\d{2}(?:-\d+)?)\.html$/);
+      if (m && !known.has(m[1])) {
+        entries.push({ date: m[1], wordCount: 0, words: [], file: f });
+        known.add(m[1]);
+      }
+    }
+  } catch (err) {
+    console.error(`[index] Could not read output directory: ${(err as Error).message}`);
+    process.exit(1);
+  }
+
+  entries.sort((a, b) => b.date.localeCompare(a.date));
+  saveManifest(outputDir, entries);
+
+  const html = buildIndexPage(entries);
+  const indexPath = resolveOutputPath(outputDir, 'index.html');
+  fs.writeFileSync(indexPath, html, 'utf8');
+  console.log(`[output] Index rebuilt → ${indexPath} (${entries.length} entr${entries.length !== 1 ? 'ies' : 'y'})`);
+}
