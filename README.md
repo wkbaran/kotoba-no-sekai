@@ -32,10 +32,28 @@ The HTML page links each highlighted example word directly to its source article
 ```bash
 npm install
 npm run build
+cp .env.example .env   # then fill in any keys you want
 ```
 
 Edit `sources.yaml` to configure your RSS feeds (see the commented examples inside).
-Edit `config.yaml` to set your preferred difficulty level and output paths.
+Edit `config.yaml` to set your preferred difficulty level, output paths, TTS provider, and translation provider.
+
+---
+
+## Environment Variables
+
+All keys are optional — the pipeline degrades gracefully when they are absent.
+Copy `.env.example` to `.env` and fill in the ones you want.
+
+| Variable | Used for |
+|----------|----------|
+| `ELEVENLABS_API_KEY` | ElevenLabs TTS (highest-quality Japanese audio) |
+| `OPENAI_API_KEY` | OpenAI TTS fallback (`tts-1` / `tts-1-hd`) |
+| `GOOGLE_API_KEY` | Google Cloud Translation fallback |
+| `DEBUG` | Print full error stack traces when set to any value |
+
+**TTS priority (when `tts.provider = auto`):** ElevenLabs → OpenAI → browser Web Speech API
+**Translation priority (when `translation.provider = auto`):** Ollama (local, no key needed) → Google Translate → disabled
 
 ---
 
