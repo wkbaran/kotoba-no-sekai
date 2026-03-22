@@ -63,9 +63,13 @@ function upsertManifest(outputDir: string, entry: ManifestEntry): ManifestEntry[
 
 function buildIndexPage(entries: ManifestEntry[]): string {
   const rows = entries.map(entry => {
-    const chips = entry.words.slice(0, 6).map(w =>
-      `<span class="word-chip"><span class="chip-word">${w.word}</span><span class="chip-def">${w.definition}</span></span>`
-    ).join('');
+    const chips = entry.words.slice(0, 6).map(w => {
+      // Handle legacy manifest entries where words were plain strings
+      const mw = typeof w === 'string' ? { word: w as string, definition: '' } : w;
+      return mw.definition
+        ? `<span class="word-chip"><span class="chip-word">${mw.word}</span><span class="chip-def">${mw.definition}</span></span>`
+        : `<span class="word-chip"><span class="chip-word">${mw.word}</span></span>`;
+    }).join('');
     return `
     <a class="entry" href="${entry.file}">
       <div class="entry-meta">
