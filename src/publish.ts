@@ -40,8 +40,9 @@ function buildClient(config: AppConfig): { client: S3Client; bucket: string; pre
 
   if (pub.provider === 'r2') {
     const r2 = pub.r2;
-    if (!r2?.bucket || !r2?.account_id) {
-      throw new Error('publish.r2.bucket and publish.r2.account_id are required for R2');
+    const r2Bucket = r2?.bucket ?? process.env.R2_BUCKET;
+    if (!r2Bucket || !r2?.account_id) {
+      throw new Error('publish.r2.bucket (or R2_BUCKET env var) and publish.r2.account_id are required for R2');
     }
     const accessKeyId     = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ?? '';
     const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ?? '';
@@ -54,22 +55,23 @@ function buildClient(config: AppConfig): { client: S3Client; bucket: string; pre
         endpoint: `https://${r2.account_id}.r2.cloudflarestorage.com`,
         credentials: { accessKeyId, secretAccessKey },
       }),
-      bucket: r2.bucket,
+      bucket: r2Bucket,
       prefix: r2.prefix ?? '',
     };
   }
 
   // Default: S3
   const s3 = pub.s3;
-  if (!s3?.bucket) {
-    throw new Error('publish.s3.bucket is required');
+  const s3Bucket = s3?.bucket ?? process.env.S3_BUCKET;
+  if (!s3Bucket) {
+    throw new Error('publish.s3.bucket is required (or set S3_BUCKET env var)');
   }
   // Credentials come from env (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) or ~/.aws/credentials
   return {
     client: new S3Client({
-      region: s3.region ?? process.env.AWS_REGION ?? 'us-east-1',
+      region: s3?.region ?? process.env.AWS_REGION ?? 'us-east-1',
     }),
-    bucket: s3.bucket,
+    bucket: s3Bucket,
     prefix: s3.prefix ?? '',
   };
 }

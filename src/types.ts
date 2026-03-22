@@ -11,12 +11,12 @@ export type PublishProvider = 's3' | 'r2';
 export interface PublishConfig {
   provider: PublishProvider;
   s3?: {
-    bucket: string;
+    bucket?: string;
     region?: string;
     prefix?: string;
   };
   r2?: {
-    bucket: string;
+    bucket?: string;
     account_id: string;
     prefix?: string;
   };

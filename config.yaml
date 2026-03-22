@@ -79,8 +79,10 @@ translation:
 # provider: s3   → AWS S3
 #                  Credentials: AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars,
 #                  or ~/.aws/credentials, or an IAM instance role
+#                  Bucket: publish.s3.bucket in config, or S3_BUCKET env var
 #           r2   → Cloudflare R2 (S3-compatible, zero egress fees)
 #                  Credentials: CLOUDFLARE_R2_ACCESS_KEY_ID + CLOUDFLARE_R2_SECRET_ACCESS_KEY
+#                  Bucket: publish.r2.bucket in config, or R2_BUCKET env var
 #
 # prefix is optional — use it to serve from a subdirectory of the bucket.
 #
@@ -94,3 +96,5 @@ translation:
 #     bucket: my-kotoba-bucket
 #     account_id: your-cloudflare-account-id
 #     # prefix: kotoba
+publish:
+  provider: s3
