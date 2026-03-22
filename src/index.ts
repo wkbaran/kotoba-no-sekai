@@ -9,11 +9,15 @@
  *   kotoba --level intermediate
  *   kotoba --max 20
  *   kotoba --dry-run               # tokenize and show candidates, don't write output
+ *   kotoba --word 食べる            # find and digest a specific Japanese word
+ *   kotoba --source "NHK News"     # select one word from a named source
+ *   kotoba --url https://...       # select one word from a specific article URL
+ *   kotoba --rebuild-index         # rebuild index pages without running the pipeline
  *   kotoba --help
  */
 
 import { loadConfig, loadSources, ensureOutputDirs, resolveRunSlug } from './config.js';
-import { runPipeline } from './pipeline.js';
+import { runPipeline, runWordPipeline, runSourcePipeline, runUrlPipeline } from './pipeline.js';
 import { rebuildIndexOutput } from './output/index.js';
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -53,17 +57,26 @@ OPTIONS
   --level   <level>   Override difficulty level    (beginner|intermediate|advanced|all)
   --max     <n>       Override max words per run
   --dry-run           Print candidates without writing output or updating DB
-  --rebuild-index     Rebuild index.html from existing digest files, then exit
+  --word    <word>    Search all feeds for a specific Japanese word and digest it
+  --source  <name>    Select one word from a named source in sources.yaml
+  --url     <url>     Fetch a specific article URL and select one word from it
+  --rebuild-index     Rebuild index.html / manual.html / words.html, then exit
   --help, -h          Show this help
 
 OUTPUTS (written to paths configured in config.yaml)
   output/data/words-YYYY-MM-DD.json      Anki-compatible JSON
   output/web/digest-YYYY-MM-DD.md        Markdown reading digest
   output/web/digest-YYYY-MM-DD.html      Self-contained HTML page
+  output/web/index.html                  Daily digest archive
+  output/web/manual.html                 Custom run archive (--word / --source / --url)
+  output/web/words.html                  Master word list, A-Z by English definition
 
 EXAMPLES
   kotoba
   kotoba --level advanced --max 5
+  kotoba --word 食べる
+  kotoba --source "NHK News"
+  kotoba --url https://www3.nhk.or.jp/news/html/...
   kotoba --sources feeds/science.yaml
 `);
 }
@@ -76,7 +89,7 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const configPath = typeof args.config === 'string' ? args.config : 'config.yaml';
+  const configPath  = typeof args.config  === 'string' ? args.config  : 'config.yaml';
   const sourcesPath = typeof args.sources === 'string' ? args.sources : 'sources.yaml';
 
   let config = loadConfig(configPath);
@@ -123,7 +136,17 @@ async function main(): Promise<void> {
   const slug = resolveRunSlug(date, config.output.html);
 
   try {
-    const result = await runPipeline(config, feeds, slug);
+    let result: { wordsCollected: number; outputPaths: { json: string; markdown: string; html: string } };
+
+    if (typeof args.word === 'string') {
+      result = await runWordPipeline(args.word, config, feeds, slug);
+    } else if (typeof args.source === 'string') {
+      result = await runSourcePipeline(args.source, config, feeds, slug);
+    } else if (typeof args.url === 'string') {
+      result = await runUrlPipeline(args.url, config, slug);
+    } else {
+      result = await runPipeline(config, feeds, slug);
+    }
 
     if (result.wordsCollected === 0) {
       console.log('\n  No new words this run. Try a different level or add more feeds.\n');
