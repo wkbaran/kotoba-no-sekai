@@ -95,6 +95,18 @@ async function main(): Promise<void> {
   const sourcesPath = typeof args.sources === 'string' ? args.sources : 'sources.yaml';
 
   let config = loadConfig(configPath);
+
+  // Utility commands — run immediately without loading feeds or printing the pipeline header
+  if (args['rebuild-index']) {
+    rebuildIndexOutput(config.output.html);
+    return;
+  }
+
+  if (args['publish']) {
+    await publishOutput(config);
+    return;
+  }
+
   const feeds = loadSources(sourcesPath);
 
   // CLI overrides
@@ -122,16 +134,6 @@ async function main(): Promise<void> {
   console.log('  言葉の世界 — World of Words');
   console.log(`  ${date}  |  level: ${config.level}  |  feeds: ${feeds.length}`);
   console.log('');
-
-  if (args['rebuild-index']) {
-    rebuildIndexOutput(config.output.html);
-    return;
-  }
-
-  if (args['publish']) {
-    await publishOutput(config);
-    return;
-  }
 
   if (args['dry-run']) {
     console.log('[dry-run] Fetching articles and extracting candidates only...');
