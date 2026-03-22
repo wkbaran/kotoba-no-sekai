@@ -171,31 +171,6 @@ Words are tracked in a local SQLite database (`output/kotoba.db`). A word is ski
 
 ---
 
-## Scheduling
-
-**cron** (daily at 7am):
-```
-0 7 * * * cd /path/to/kotoba-no-sekai && node dist/index.js
-```
-
-**GitHub Actions** — create `.github/workflows/kotoba.yml`:
-```yaml
-on:
-  schedule:
-    - cron: '0 7 * * *'
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci && npm run build && node dist/index.js
-```
-
----
-
 ## Word Record Schema
 
 Each word in the JSON output:
