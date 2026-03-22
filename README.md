@@ -30,7 +30,7 @@ All three index pages include a nav bar linking between them. Running `--rebuild
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 20.6+
 - Internet access (RSS feeds + Jisho API for definitions)
 
 ---
@@ -60,6 +60,7 @@ Copy `.env.example` to `.env` and fill in the ones you want.
 | `GOOGLE_API_KEY` | Google Cloud Translation fallback |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 publish (falls back to `~/.aws/credentials` or IAM role if unset) |
 | `AWS_REGION` | S3 region (default `us-east-1`) |
+| `CLOUDFRONT_DISTRIBUTION_ID` | CloudFront distribution ID — if set, `--publish` invalidates the cache automatically |
 | `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | R2 publish |
 | `DEBUG` | Print full error stack traces when set to any value |
 
@@ -75,20 +76,20 @@ Copy `.env.example` to `.env` and fill in the ones you want.
 npm start
 
 # Override level or word count
-node --env-file-if-exists=.env dist/index.js --level intermediate
-node --env-file-if-exists=.env dist/index.js --max 10
+npm start -- --level intermediate
+npm start -- --max 10
 
 # Manual modes — produce a 1-word digest on manual.html
-node --env-file-if-exists=.env dist/index.js --word 食べる          # search all feeds for this word
-node --env-file-if-exists=.env dist/index.js --source "NHK News"    # pick a word from a named source
-node --env-file-if-exists=.env dist/index.js --url https://...      # pick a word from any article URL
+npm start -- --word 食べる          # search all feeds for this word
+npm start -- --source "NHK News"    # pick a word from a named source
+npm start -- --url https://...      # pick a word from any article URL
 
 # Utilities
-node --env-file-if-exists=.env dist/index.js --dry-run              # show candidates without writing output
-node --env-file-if-exists=.env dist/index.js --rebuild-index        # regenerate index.html / manual.html / words.html
-node --env-file-if-exists=.env dist/index.js --publish              # sync output/web/ to S3 or R2
-node --env-file-if-exists=.env dist/index.js --config path/to/config.yaml --sources path/to/sources.yaml
-node --env-file-if-exists=.env dist/index.js --help
+npm start -- --dry-run              # show candidates without writing output
+npm start -- --rebuild-index        # regenerate index.html / manual.html / words.html
+npm start -- --publish              # sync output/web/ to S3 or R2
+npm start -- --config path/to/config.yaml --sources path/to/sources.yaml
+npm start -- --help
 ```
 
 ---
@@ -102,7 +103,7 @@ On a standard run the pipeline:
 3. At most one word is taken per article, then the pipeline advances to the next article for the next word. This ensures each collected word comes from a different topic.
 4. Stops once `max_words_per_run` words are collected.
 
-For **`--word`** the pipeline searches every article (each at most once) for any surface form of the target word using the tokenizer's base form. JLPT level and deduplication checks are skipped — you always get the word you asked for if it appears anywhere in the feeds.
+For **`--word`** (`npm start -- --word 食べる`) the pipeline searches every article (each at most once) for any surface form of the target word using the tokenizer's base form. JLPT level and deduplication checks are skipped — you always get the word you asked for if it appears anywhere in the feeds.
 
 For **`--source`** and **`--url`** the same per-article logic applies but restricted to a single source or fetched URL, collecting one word.
 
