@@ -31,7 +31,8 @@ function renderCard(record: WordRecord): string {
     const translationEl = ex.translation
       ? `<p class="example-translation">${escapeAttr(ex.translation)}</p>`
       : '';
-    return `<blockquote class="example" data-text="${escapeAttr(ex.plain)}" data-index="${i}">${linked}${audioEl}${translationEl}</blockquote>`;
+    const exPlayBtn = `<button class="play-btn play-ex" data-text="${escapeAttr(ex.plain)}" data-index="${i}" aria-label="Play example" title="Play example">▶</button>`;
+    return `<blockquote class="example" data-index="${i}"><div class="example-top">${exPlayBtn}<span>${linked}</span></div>${audioEl}${translationEl}</blockquote>`;
   }).join('\n');
 
   const altDefs = record.altDefinitions.length > 0
@@ -39,11 +40,11 @@ function renderCard(record: WordRecord): string {
     : '';
 
   // Play button data attributes carry text for Web Speech fallback
-  const playBtn = `<button class="play-btn"
+  const playBtn = `<button class="play-btn play-word"
       data-word="${escapeAttr(record.word)}"
       data-reading="${escapeAttr(record.reading)}"
       aria-label="Play pronunciation"
-      title="Play word then example">▶</button>`;
+      title="Play word">▶</button>`;
 
   return `
   <article class="word-card card-${record.jlptLevel.toLowerCase()}">
@@ -300,6 +301,23 @@ function buildPage(records: WordRecord[], date: string): string {
       font-size: .95rem;
       color: var(--example-text);
       transition: background .25s;
+      display: flex;
+      flex-direction: column;
+      gap: .25rem;
+    }
+
+    .example-top {
+      display: flex;
+      align-items: baseline;
+      gap: .5rem;
+    }
+
+    .example-top .play-btn {
+      font-size: .65rem;
+      width: 1.5rem;
+      height: 1.5rem;
+      flex-shrink: 0;
+      align-self: center;
     }
 
     .example mark {
@@ -364,9 +382,9 @@ function buildPage(records: WordRecord[], date: string): string {
 
       var currentBtn = null;
 
-      function speak(text, lang, onEnd) {
+      function speak(text, onEnd) {
         var utt = new SpeechSynthesisUtterance(text);
-        utt.lang = lang || 'ja-JP';
+        utt.lang = 'ja-JP';
         utt.rate = 0.9;
         utt.onend = onEnd || null;
         speechSynthesis.cancel();
@@ -376,9 +394,7 @@ function buildPage(records: WordRecord[], date: string): string {
       function playAudioEl(audioEl, onEnd) {
         audioEl.currentTime = 0;
         audioEl.onended = onEnd || null;
-        audioEl.play().catch(function () {
-          if (onEnd) onEnd();
-        });
+        audioEl.play().catch(function () { if (onEnd) onEnd(); });
       }
 
       function markPlaying(btn, on) {
@@ -391,55 +407,53 @@ function buildPage(records: WordRecord[], date: string): string {
         currentBtn = on ? btn : null;
       }
 
-      document.querySelectorAll('.play-btn').forEach(function (playBtn) {
+      function stopAll() {
+        speechSynthesis.cancel();
+        document.querySelectorAll('audio').forEach(function (a) { a.pause(); a.currentTime = 0; });
+        if (currentBtn) { markPlaying(currentBtn, false); }
+      }
+
+      /* Word buttons */
+      document.querySelectorAll('.play-word').forEach(function (playBtn) {
         playBtn.addEventListener('click', function () {
-          var card = playBtn.closest('.word-card');
-
-          // Stop if already playing
-          if (playBtn.classList.contains('playing')) {
-            speechSynthesis.cancel();
-            var els = card.querySelectorAll('audio');
-            els.forEach(function (a) { a.pause(); a.currentTime = 0; });
-            markPlaying(playBtn, false);
-            return;
-          }
-
+          if (playBtn.classList.contains('playing')) { stopAll(); return; }
+          stopAll();
           markPlaying(playBtn, true);
 
           var word     = playBtn.dataset.word;
           var reading  = playBtn.dataset.reading;
           var wordText = word + '。' + reading;
-
-          // Collect example sentences for playback
-          var examples = card.querySelectorAll('.example');
-          var exTexts  = Array.from(examples).map(function (el) {
-            return el.dataset.text || '';
-          }).filter(Boolean);
-
+          var card     = playBtn.closest('.word-card');
           var wordAudioEl = card.querySelector('.audio-word');
-          var exAudioEls  = card.querySelectorAll('.audio-ex');
 
-          function playExamples(index) {
-            if (index >= exTexts.length) {
-              markPlaying(playBtn, false);
-              return;
-            }
-            var exEl = exAudioEls[index];
-            if (exEl && exEl.src) {
-              playAudioEl(exEl, function () { playExamples(index + 1); });
-            } else {
-              speak(exTexts[index], 'ja-JP', function () { playExamples(index + 1); });
-            }
-          }
-
-          function afterWord() {
-            setTimeout(function () { playExamples(0); }, 400);
-          }
+          function done() { markPlaying(playBtn, false); }
 
           if (wordAudioEl && wordAudioEl.src) {
-            playAudioEl(wordAudioEl, afterWord);
+            playAudioEl(wordAudioEl, done);
           } else {
-            speak(wordText, 'ja-JP', afterWord);
+            speak(wordText, done);
+          }
+        });
+      });
+
+      /* Example buttons */
+      document.querySelectorAll('.play-ex').forEach(function (playBtn) {
+        playBtn.addEventListener('click', function () {
+          if (playBtn.classList.contains('playing')) { stopAll(); return; }
+          stopAll();
+          markPlaying(playBtn, true);
+
+          var text  = playBtn.dataset.text;
+          var idx   = playBtn.dataset.index;
+          var card  = playBtn.closest('.word-card');
+          var exAudioEl = card.querySelector('.audio-ex[data-index="' + idx + '"]');
+
+          function done() { markPlaying(playBtn, false); }
+
+          if (exAudioEl && exAudioEl.src) {
+            playAudioEl(exAudioEl, done);
+          } else {
+            speak(text, done);
           }
         });
       });
