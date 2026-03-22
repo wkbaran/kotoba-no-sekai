@@ -39,6 +39,11 @@
 #   name: Wikipedia JP Featured
 
 feeds:
+  - url: https://www3.nhk.or.jp/news/easy/k10012345678000/k10012345678000.rss
+    domain: news
+    name: NHK Web Easy
+    enabeld: true
+
   - url: https://www3.nhk.or.jp/rss/news/cat0.xml
     domain: news
     name: NHK News
@@ -52,4 +57,9 @@ feeds:
   - url: https://www3.nhk.or.jp/rss/news/cat1.xml
     domain: society
     name: NHK Life & Society
+    enabled: true
+
+  - url: https://www.asahi.com/rss/asahi/newsheadlines.rdf
+    domain: news
+    name: Asahi Shimbun
     enabled: true
