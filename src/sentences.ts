@@ -3,12 +3,61 @@ import type { ExampleSentence } from './types.js';
 // Japanese sentence-ending punctuation
 const SENTENCE_END = /(?<=[。！？…])\s*/;
 
+// Max character length for an example clause
+const MAX_CLAUSE_LEN = 120;
+
 /** Split Japanese text into sentences. */
 export function splitSentences(text: string): string[] {
   return text
     .split(SENTENCE_END)
     .map(s => s.trim())
     .filter(s => s.length >= 10 && s.length <= 300);
+}
+
+/**
+ * For a long sentence, split on 、 and return the sub-sequence of clauses
+ * that contains the target word, expanding outward (before and after) to
+ * keep roughly equal context on each side while staying within MAX_CLAUSE_LEN.
+ */
+function extractClause(sentence: string, target: string): string {
+  const clauses = sentence.split('、');
+  if (clauses.length <= 1) return sentence;
+
+  const idx = clauses.findIndex(c => c.includes(target));
+  if (idx === -1) return sentence;
+
+  let lo = idx, hi = idx;
+  let beforeChars = 0, afterChars = 0;
+
+  while (true) {
+    const currentLen = clauses.slice(lo, hi + 1).join('、').length;
+    const canAddBefore = lo > 0;
+    const canAddAfter = hi < clauses.length - 1;
+    if (!canAddBefore && !canAddAfter) break;
+
+    const nextBeforeLen = canAddBefore ? clauses[lo - 1].length + 1 : Infinity;
+    const nextAfterLen  = canAddAfter  ? clauses[hi + 1].length + 1 : Infinity;
+
+    // Stop if even the smaller addition would exceed the limit
+    if (currentLen + Math.min(nextBeforeLen, nextAfterLen) > MAX_CLAUSE_LEN) break;
+
+    // Prefer the side with less accumulated context to stay balanced
+    if (canAddBefore && (!canAddAfter || beforeChars <= afterChars)) {
+      if (currentLen + nextBeforeLen <= MAX_CLAUSE_LEN) {
+        beforeChars += nextBeforeLen; lo--;
+      } else if (canAddAfter && currentLen + nextAfterLen <= MAX_CLAUSE_LEN) {
+        afterChars += nextAfterLen; hi++;
+      } else break;
+    } else {
+      if (canAddAfter && currentLen + nextAfterLen <= MAX_CLAUSE_LEN) {
+        afterChars += nextAfterLen; hi++;
+      } else if (canAddBefore && currentLen + nextBeforeLen <= MAX_CLAUSE_LEN) {
+        beforeChars += nextBeforeLen; lo--;
+      } else break;
+    }
+  }
+
+  return clauses.slice(lo, hi + 1).join('、');
 }
 
 /**
@@ -41,18 +90,23 @@ export function findExamples(
     const matchedTarget = targets.find(t => sentence.includes(t));
     if (!matchedTarget) continue;
 
-    // Escape for safe HTML insertion (sentence is plain text, not HTML)
-    const escapedSentence = escapeHtml(sentence);
+    // Extract a shorter clause centered on the target word if sentence is long
+    const clause = sentence.length > MAX_CLAUSE_LEN
+      ? extractClause(sentence, matchedTarget)
+      : sentence;
+
+    // Escape for safe HTML insertion (clause is plain text, not HTML)
+    const escapedClause = escapeHtml(clause);
     const escapedTarget = escapeHtml(matchedTarget);
 
-    const markedHtml = escapedSentence.replace(
+    const markedHtml = escapedClause.replace(
       escapedTarget,
       `<mark>${escapedTarget}</mark>`
     );
 
     results.push({
       markedHtml,
-      plain: sentence,
+      plain: clause,
       sourceUrl: sourceUrl + '#:~:text=' + encodeURIComponent(matchedTarget),
     });
   }

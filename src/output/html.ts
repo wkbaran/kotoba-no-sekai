@@ -28,8 +28,8 @@ function renderCard(record: WordRecord): string {
     const audioEl = ex.audioFile
       ? `<audio class="audio-ex" data-index="${i}" src="${ex.audioFile}" preload="none"></audio>`
       : '';
-    const translationEl = ex.translation
-      ? `<p class="example-translation">${escapeAttr(ex.translation)}</p>`
+    const translationEl = ex.translationMarkedHtml
+      ? `<p class="example-translation">${ex.translationMarkedHtml}</p>`
       : '';
     const exPlayBtn = `<button class="play-btn play-ex" data-text="${escapeAttr(ex.plain)}" data-index="${i}" aria-label="Play example" title="Play example">▶</button>`;
     return `<blockquote class="example" data-index="${i}"><div class="example-top">${exPlayBtn}<span>${linked}</span></div>${audioEl}${translationEl}</blockquote>`;

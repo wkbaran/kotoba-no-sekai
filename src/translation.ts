@@ -107,6 +107,46 @@ async function translateOllama(sentence: string, config: AppConfig): Promise<str
   return json.response?.trim() ?? null;
 }
 
+// ── Translation markup ───────────────────────────────────
+
+/**
+ * Returns an HTML-escaped version of `translation` with the best-matching
+ * keyword from `definition` / `altDefinitions` wrapped in <mark> tags.
+ * Falls back to plain HTML-escaped text if no keyword is found.
+ */
+export function markTranslation(
+  translation: string,
+  definition: string,
+  altDefinitions: string[]
+): string {
+  const escaped = escapeHtml(translation);
+
+  // Build candidates: strip leading "to ", take the first word/phrase before
+  // punctuation or parentheses, lowercase for matching.
+  const candidates = [definition, ...altDefinitions.slice(0, 2)]
+    .map(d => d.replace(/^to /, '').split(/[;,\/\(]/)[0].trim())
+    .filter(d => d.length > 2);
+
+  for (const keyword of candidates) {
+    const escapedKeyword = escapeHtml(keyword);
+    const pattern = escapedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(${pattern})`, 'gi');
+    const marked = escaped.replace(re, '<mark>$1</mark>');
+    if (marked !== escaped) return marked;
+  }
+
+  return escaped;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── Google Translate ──────────────────────────────────────
 
 async function translateGoogle(sentence: string): Promise<string | null> {

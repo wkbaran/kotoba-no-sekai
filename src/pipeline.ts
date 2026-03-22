@@ -15,7 +15,7 @@ import { writeMarkdownOutput } from './output/markdown.js';
 import { writeHtmlOutput } from './output/html.js';
 import { writeIndexOutput } from './output/index.js';
 import { generateAudio, resolveProvider } from './tts.js';
-import { resolveTranslationProvider, translateSentence } from './translation.js';
+import { resolveTranslationProvider, translateSentence, markTranslation } from './translation.js';
 import path from 'path';
 
 export interface PipelineResult {
@@ -97,7 +97,14 @@ export async function runPipeline(
     for (const record of collectedWords) {
       for (const example of record.examples) {
         const translation = await translateSentence(example.plain, translationProvider, config);
-        if (translation) example.translation = translation;
+        if (translation) {
+          example.translation = translation;
+          example.translationMarkedHtml = markTranslation(
+            translation,
+            record.definition,
+            record.altDefinitions
+          );
+        }
       }
     }
   }

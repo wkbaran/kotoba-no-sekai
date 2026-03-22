@@ -85,6 +85,8 @@ export interface ExampleSentence {
   audioFile?: string;
   /** English translation of the example sentence */
   translation?: string;
+  /** HTML-escaped translation with the definition keyword wrapped in <mark> */
+  translationMarkedHtml?: string;
 }
 
 export interface WordRecord {

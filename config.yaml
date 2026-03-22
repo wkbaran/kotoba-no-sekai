@@ -66,6 +66,6 @@ translation:
   ollama:
     url: http://localhost:11434
     # Any model with good multilingual support works.
-    # Qwen2.5 series is excellent for Japanese → English.
-    # Other good options: gemma3:4b, mistral:7b, llama3.2:3b
-    model: qwen2.5:3b
+    # translategemma:12b is purpose-built for translation.
+    # Other good options: qwen2.5:3b, gemma3:4b, llama3.2:3b
+    model: translategemma:12b

@@ -60,23 +60,15 @@ Copy `.env.example` to `.env` and fill in the ones you want.
 ## Usage
 
 ```bash
-# Standard run
-node dist/index.js
+# Standard run (loads .env automatically if present)
+npm start
 
-# Override difficulty level
-node dist/index.js --level intermediate
-
-# Override word count
-node dist/index.js --max 10
-
-# Use a different config or sources file
-node dist/index.js --config path/to/config.yaml --sources path/to/sources.yaml
-
-# Preview candidates without writing output or touching the database
-node dist/index.js --dry-run
-
-# Help
-node dist/index.js --help
+# Or invoke directly with flags
+node --env-file-if-exists=.env dist/index.js --level intermediate
+node --env-file-if-exists=.env dist/index.js --max 10
+node --env-file-if-exists=.env dist/index.js --config path/to/config.yaml --sources path/to/sources.yaml
+node --env-file-if-exists=.env dist/index.js --dry-run
+node --env-file-if-exists=.env dist/index.js --help
 ```
 
 ---
