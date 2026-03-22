@@ -5,10 +5,15 @@ import { resolveOutputPath } from '../config.js';
 
 // ── Manifest ─────────────────────────────────────────────
 
+interface ManifestWord {
+  word: string;
+  definition: string;
+}
+
 interface ManifestEntry {
   date: string;
   wordCount: number;
-  words: string[];        // kanji forms, for the preview
+  words: ManifestWord[];  // word + definition pairs, for the preview
   file: string;           // relative filename, e.g. digest-2026-03-21.html
 }
 
@@ -42,7 +47,7 @@ function upsertManifest(outputDir: string, entry: ManifestEntry): ManifestEntry[
     for (const f of fs.readdirSync(resolvedDir)) {
       const m = f.match(/^digest-(\d{4}-\d{2}-\d{2})\.html$/);
       if (m && !known.has(m[1])) {
-        entries.push({ date: m[1], wordCount: 0, words: [], file: f });
+        entries.push({ date: m[1], wordCount: 0, words: [] as ManifestWord[], file: f });
         known.add(m[1]);
       }
     }
@@ -58,12 +63,16 @@ function upsertManifest(outputDir: string, entry: ManifestEntry): ManifestEntry[
 
 function buildIndexPage(entries: ManifestEntry[]): string {
   const rows = entries.map(entry => {
-    const preview = entry.words.slice(0, 6).join('　');
+    const chips = entry.words.slice(0, 6).map(w =>
+      `<span class="word-chip"><span class="chip-word">${w.word}</span><span class="chip-def">${w.definition}</span></span>`
+    ).join('');
     return `
     <a class="entry" href="${entry.file}">
-      <span class="entry-date">${entry.date}</span>
-      <span class="entry-count">${entry.wordCount} word${entry.wordCount !== 1 ? 's' : ''}</span>
-      <span class="entry-preview">${preview}</span>
+      <div class="entry-meta">
+        <span class="entry-date">${entry.date}</span>
+        <span class="entry-count">${entry.wordCount} word${entry.wordCount !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="entry-preview">${chips}</div>
     </a>`;
   }).join('\n');
 
@@ -160,10 +169,9 @@ function buildIndexPage(entries: ManifestEntry[]): string {
     }
 
     .entry {
-      display: grid;
-      grid-template-columns: 7rem 5rem 1fr;
-      align-items: center;
-      gap: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .6rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -179,6 +187,12 @@ function buildIndexPage(entries: ManifestEntry[]): string {
       border-color: var(--accent);
     }
 
+    .entry-meta {
+      display: flex;
+      align-items: baseline;
+      gap: .75rem;
+    }
+
     .entry-date {
       font-weight: 600;
       font-variant-numeric: tabular-nums;
@@ -192,12 +206,30 @@ function buildIndexPage(entries: ManifestEntry[]): string {
     }
 
     .entry-preview {
-      font-size: 1rem;
-      letter-spacing: .05em;
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+    }
+
+    .word-chip {
+      display: inline-flex;
+      align-items: baseline;
+      gap: .3rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .2em .55em;
+      font-size: .85rem;
+    }
+
+    .chip-word {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .chip-def {
       color: var(--muted);
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
+      font-size: .78rem;
     }
 
     .empty {
@@ -221,14 +253,7 @@ function buildIndexPage(entries: ManifestEntry[]): string {
     }
 
     @media (max-width: 480px) {
-      .entry {
-        grid-template-columns: 1fr auto;
-        grid-template-rows: auto auto;
-      }
-      .entry-preview {
-        grid-column: 1 / -1;
-        font-size: .9rem;
-      }
+      .word-chip { font-size: .8rem; }
     }
   </style>
 </head>
@@ -284,7 +309,7 @@ export function writeIndexOutput(
   const entry: ManifestEntry = {
     date,
     wordCount: records.length,
-    words: records.map(r => r.word),
+    words: records.map(r => ({ word: r.word, definition: r.definition })),
     file: `digest-${date}.html`,
   };
 
