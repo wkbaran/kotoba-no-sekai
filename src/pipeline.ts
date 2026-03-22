@@ -161,26 +161,59 @@ export async function runPipeline(
 
   console.log(`[pipeline] Target: ${config.max_words_per_run} words at level "${config.level}"`);
 
-  const collectedWords: WordRecord[] = [];
+  const collectedPairs: { article: ArticleContent; record: WordRecord }[] = [];
   const usedSources: string[] = [];
 
   const allArticles = await fetchAllArticles(feeds);
 
   for (const { article, feedName } of allArticles) {
-    if (collectedWords.length >= config.max_words_per_run) break;
+    if (collectedPairs.length >= config.max_words_per_run) break;
 
     const newWords = await processArticle(article, config, db, tokenizer, 1);
     if (newWords.length > 0) {
-      collectedWords.push(newWords[0]);
+      collectedPairs.push({ article, record: newWords[0] });
       usedSources.push(feedName);
     }
   }
 
-  if (collectedWords.length === 0) {
+  if (collectedPairs.length === 0) {
     console.warn('[pipeline] No new words found. All candidates may already be in the database.');
     db.close();
     return { wordsCollected: 0, outputPaths: { json: '', markdown: '', html: '' } };
   }
+
+  // Augment examples by searching all collected articles for each word
+  console.log('[pipeline] Searching collected articles for additional examples...');
+  for (const { record } of collectedPairs) {
+    if (record.examples.length >= config.max_examples_per_word) {
+      console.log(`[pipeline]   ${record.word}: already has ${record.examples.length} example(s), skipping`);
+      continue;
+    }
+    const seen = new Set(record.examples.map(e => e.plain));
+    const before = record.examples.length;
+    for (const { article } of collectedPairs) {
+      if (record.examples.length >= config.max_examples_per_word) break;
+      if (article.url === record.sourceUrl) continue;
+      const additional = findExamples(
+        article.text,
+        record.word,
+        record.word,
+        article.url,
+        config.max_examples_per_word - record.examples.length
+      );
+      for (const ex of additional) {
+        if (!seen.has(ex.plain)) {
+          seen.add(ex.plain);
+          record.examples.push(ex);
+          if (record.examples.length >= config.max_examples_per_word) break;
+        }
+      }
+    }
+    const added = record.examples.length - before;
+    console.log(`[pipeline]   ${record.word}: ${before} → ${record.examples.length} example(s)${added === 0 ? ' (no new matches)' : ''}`);
+  }
+
+  const collectedWords = collectedPairs.map(p => p.record);
 
   console.log(`[pipeline] Collected ${collectedWords.length} word(s). Generating audio...`);
 

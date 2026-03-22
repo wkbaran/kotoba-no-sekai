@@ -9,11 +9,11 @@
 level: beginner
 
 # Maximum number of new words to collect per run.
-max_words_per_run: 4
+max_words_per_run: 3
 
 # Maximum number of example sentences to attach to each word.
 # If fewer are found in the source article, the word is still included.
-max_examples_per_word: 2
+max_examples_per_word: 3
 
 # Minimum length (in characters) for a candidate word's surface form.
 # Filters out single-character noise like particles that slip through POS filtering.

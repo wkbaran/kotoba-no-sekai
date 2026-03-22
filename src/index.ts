@@ -168,6 +168,7 @@ async function main(): Promise<void> {
     console.log(`  Markdown → ${result.outputPaths.markdown}`);
     console.log(`  HTML     → ${result.outputPaths.html}`);
     console.log('');
+    process.exit(0);
   } catch (err) {
     console.error('\n[error]', (err as Error).message);
     if (process.env.DEBUG) console.error((err as Error).stack);
