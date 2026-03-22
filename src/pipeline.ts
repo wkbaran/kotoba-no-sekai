@@ -36,28 +36,29 @@ export async function runPipeline(
   const collectedWords: WordRecord[] = [];
   const usedSources: string[] = [];
 
-  // Shuffle feeds so we don't always start from the same source
+  // Fetch all articles upfront and interleave across feeds for topic variety
   const shuffledFeeds = shuffle([...feeds]);
+  const allArticles: { article: ArticleContent; feedName: string }[] = [];
 
-  outer:
   for (const feed of shuffledFeeds) {
+    const articles = await fetchFeedArticles(feed);
+    shuffle(articles);
+    for (const article of articles) {
+      allArticles.push({ article, feedName: feed.name });
+    }
+  }
+
+  // Shuffle the combined list so words come from different feeds/topics
+  shuffle(allArticles);
+
+  // One word per article — advances to a fresh article for each word
+  for (const { article, feedName } of allArticles) {
     if (collectedWords.length >= config.max_words_per_run) break;
 
-    const articles = await fetchFeedArticles(feed);
-    if (articles.length === 0) continue;
-
-    // Shuffle articles within the feed too
-    shuffle(articles);
-
-    for (const article of articles) {
-      if (collectedWords.length >= config.max_words_per_run) break outer;
-
-      const newWords = await processArticle(article, config, db, tokenizer);
-      collectedWords.push(...newWords);
-
-      if (newWords.length > 0) {
-        usedSources.push(feed.name);
-      }
+    const newWords = await processArticle(article, config, db, tokenizer, 1);
+    if (newWords.length > 0) {
+      collectedWords.push(newWords[0]);
+      usedSources.push(feedName);
     }
   }
 
@@ -135,13 +136,14 @@ async function processArticle(
   article: ArticleContent,
   config: AppConfig,
   db: WordDatabase,
-  tokenizer: Awaited<ReturnType<typeof getTokenizer>>
+  tokenizer: Awaited<ReturnType<typeof getTokenizer>>,
+  maxWords = config.max_words_per_run
 ): Promise<WordRecord[]> {
   const candidates = extractCandidates(article.text, tokenizer, config.min_word_length);
   const results: WordRecord[] = [];
 
   for (const candidate of candidates) {
-    if (results.length + /* already collected */ 0 >= config.max_words_per_run) break;
+    if (results.length >= maxWords) break;
 
     // Quick pre-check: already seen this base form?
     if (db.hasSeen(candidate.baseForm, candidate.reading)) {
