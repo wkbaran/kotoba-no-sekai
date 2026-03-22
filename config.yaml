@@ -69,3 +69,28 @@ translation:
     # translategemma:12b is purpose-built for translation.
     # Other good options: qwen2.5:3b, gemma3:4b, llama3.2:3b
     model: translategemma:12b
+
+# Publish configuration (optional).
+# Used by: node dist/index.js --publish
+# Syncs output/web/ to a cloud storage bucket. Compares MD5 checksums so
+# only new or changed files are uploaded; files removed locally are deleted
+# from the bucket too.
+#
+# provider: s3   → AWS S3
+#                  Credentials: AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars,
+#                  or ~/.aws/credentials, or an IAM instance role
+#           r2   → Cloudflare R2 (S3-compatible, zero egress fees)
+#                  Credentials: CLOUDFLARE_R2_ACCESS_KEY_ID + CLOUDFLARE_R2_SECRET_ACCESS_KEY
+#
+# prefix is optional — use it to serve from a subdirectory of the bucket.
+#
+# publish:
+#   provider: s3
+#   s3:
+#     bucket: my-kotoba-bucket
+#     region: us-east-1     # defaults to AWS_REGION env var or us-east-1
+#     # prefix: kotoba      # optional subfolder in the bucket
+#   r2:
+#     bucket: my-kotoba-bucket
+#     account_id: your-cloudflare-account-id
+#     # prefix: kotoba

@@ -69,6 +69,7 @@ export function loadConfig(configPath = 'config.yaml'): AppConfig {
       ollama: { ...DEFAULTS.translation.ollama, ...(raw.translation?.ollama ?? {}) },
       google: {},
     },
+    publish: raw.publish,
   };
 
   const validLevels = ['beginner', 'intermediate', 'advanced', 'all'];

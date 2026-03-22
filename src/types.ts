@@ -6,10 +6,26 @@ export type Level = 'beginner' | 'intermediate' | 'advanced' | 'all';
 export type JlptLevel = 'N5' | 'N4' | 'N3' | 'N2' | 'N1' | 'unknown';
 export type TtsProvider = 'auto' | 'openai' | 'elevenlabs' | 'browser' | 'disabled';
 export type TranslationProvider = 'auto' | 'ollama' | 'google' | 'disabled';
+export type PublishProvider = 's3' | 'r2';
+
+export interface PublishConfig {
+  provider: PublishProvider;
+  s3?: {
+    bucket: string;
+    region?: string;
+    prefix?: string;
+  };
+  r2?: {
+    bucket: string;
+    account_id: string;
+    prefix?: string;
+  };
+}
 
 // ── Config ──────────────────────────────────────────────
 
 export interface AppConfig {
+  publish?: PublishConfig;
   level: Level;
   max_words_per_run: number;
   max_examples_per_word: number;

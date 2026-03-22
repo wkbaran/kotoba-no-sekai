@@ -19,6 +19,7 @@
 import { loadConfig, loadSources, ensureOutputDirs, resolveRunSlug } from './config.js';
 import { runPipeline, runWordPipeline, runSourcePipeline, runUrlPipeline } from './pipeline.js';
 import { rebuildIndexOutput } from './output/index.js';
+import { publishOutput } from './publish.js';
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const args: Record<string, string | boolean> = {};
@@ -60,6 +61,7 @@ OPTIONS
   --word    <word>    Search all feeds for a specific Japanese word and digest it
   --source  <name>    Select one word from a named source in sources.yaml
   --url     <url>     Fetch a specific article URL and select one word from it
+  --publish           Sync output/web/ to the configured S3 or R2 bucket, then exit
   --rebuild-index     Rebuild index.html / manual.html / words.html, then exit
   --help, -h          Show this help
 
@@ -123,6 +125,11 @@ async function main(): Promise<void> {
 
   if (args['rebuild-index']) {
     rebuildIndexOutput(config.output.html);
+    return;
+  }
+
+  if (args['publish']) {
+    await publishOutput(config);
     return;
   }
 

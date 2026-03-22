@@ -58,6 +58,9 @@ Copy `.env.example` to `.env` and fill in the ones you want.
 | `ELEVENLABS_API_KEY` | ElevenLabs TTS (highest-quality Japanese audio) |
 | `OPENAI_API_KEY` | OpenAI TTS fallback (`tts-1` / `tts-1-hd`) |
 | `GOOGLE_API_KEY` | Google Cloud Translation fallback |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 publish (falls back to `~/.aws/credentials` or IAM role if unset) |
+| `AWS_REGION` | S3 region (default `us-east-1`) |
+| `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | R2 publish |
 | `DEBUG` | Print full error stack traces when set to any value |
 
 **TTS priority (when `tts.provider = auto`):** ElevenLabs → OpenAI → browser Web Speech API
@@ -83,6 +86,7 @@ node --env-file-if-exists=.env dist/index.js --url https://...      # pick a wor
 # Utilities
 node --env-file-if-exists=.env dist/index.js --dry-run              # show candidates without writing output
 node --env-file-if-exists=.env dist/index.js --rebuild-index        # regenerate index.html / manual.html / words.html
+node --env-file-if-exists=.env dist/index.js --publish              # sync output/web/ to S3 or R2
 node --env-file-if-exists=.env dist/index.js --config path/to/config.yaml --sources path/to/sources.yaml
 node --env-file-if-exists=.env dist/index.js --help
 ```
@@ -133,6 +137,31 @@ feeds:
 ```
 
 Set `enabled: false` to disable a feed without deleting it. The file ships with NHK News, Science, and Life/Society feeds enabled, plus commented-out suggestions for NHK Web Easy and Asahi Shimbun.
+
+---
+
+## Publishing
+
+`--publish` syncs `output/web/` to a cloud storage bucket. Only new or changed files are uploaded (MD5 comparison); files deleted locally are removed from the bucket too.
+
+Configure in `config.yaml`:
+
+```yaml
+publish:
+  provider: s3        # or r2
+  s3:
+    bucket: my-kotoba-bucket
+    region: us-east-1
+  r2:
+    bucket: my-kotoba-bucket
+    account_id: your-cloudflare-account-id
+```
+
+**S3** — credentials from env vars, `~/.aws/credentials`, or an IAM role. For HTTPS on a custom domain, put a CloudFront distribution in front and point a Route 53 alias record at it.
+
+**R2** — credentials from `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY`. Enable public access on the bucket to get a free `https://pub-<hash>.r2.dev` URL with no custom domain required.
+
+Both providers are configured in the same block — you can switch between them by changing `provider`.
 
 ---
 
