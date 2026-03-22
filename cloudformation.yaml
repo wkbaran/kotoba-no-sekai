@@ -166,6 +166,9 @@ Resources:
                   - s3:PutObject
                   - s3:DeleteObject
                 Resource: !Sub '${Bucket.Arn}/*'
+              - Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/*'
 
   PublishAccessKey:
     Type: AWS::IAM::AccessKey
@@ -180,6 +183,10 @@ Outputs:
       - HasCustomDomain
       - !Sub 'https://${CustomDomain}'
       - !Sub 'https://${Distribution.DomainName}'
+
+  DistributionId:
+    Description: CloudFront distribution ID — copy to .env as CLOUDFRONT_DISTRIBUTION_ID
+    Value: !Ref Distribution
 
   CloudFrontDomain:
     Description: Raw CloudFront domain (always available, even with a custom domain)

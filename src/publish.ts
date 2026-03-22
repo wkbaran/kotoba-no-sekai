@@ -7,6 +7,10 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import {
+  CloudFrontClient,
+  CreateInvalidationCommand,
+} from '@aws-sdk/client-cloudfront';
 import type { AppConfig } from './types.js';
 
 const MIME_TYPES: Record<string, string> = {
@@ -72,7 +76,7 @@ function buildClient(config: AppConfig): { client: S3Client; bucket: string; pre
       region: s3?.region ?? process.env.AWS_REGION ?? 'us-east-1',
     }),
     bucket: s3Bucket,
-    prefix: s3.prefix ?? '',
+    prefix: s3?.prefix ?? '',
   };
 }
 
@@ -136,4 +140,19 @@ export async function publishOutput(config: AppConfig): Promise<void> {
 
   const unchanged = localMap.size - uploaded;
   console.log(`[publish] ✓ ${uploaded} uploaded, ${deleted} deleted, ${unchanged} unchanged`);
+
+  // Invalidate CloudFront cache if a distribution ID is configured
+  const distributionId = process.env.CLOUDFRONT_DISTRIBUTION_ID;
+  if (distributionId) {
+    console.log(`[publish] Invalidating CloudFront distribution ${distributionId}...`);
+    const cf = new CloudFrontClient({ region: 'us-east-1' });
+    await cf.send(new CreateInvalidationCommand({
+      DistributionId: distributionId,
+      InvalidationBatch: {
+        CallerReference: Date.now().toString(),
+        Paths: { Quantity: 1, Items: ['/*'] },
+      },
+    }));
+    console.log('[publish] Invalidation created.');
+  }
 }
