@@ -61,7 +61,7 @@ export async function generateAudio(
   const audioDir = path.join(htmlOutputDir, 'audio');
   const prefix = `${record.date}-${wordIndex}`;
 
-  const wordText = `${record.word}。${record.reading}`;
+  const wordText = record.word;
   const wordFilename = `${prefix}-word.mp3`;
   const wordFilePath = path.join(audioDir, wordFilename);
 

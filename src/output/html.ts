@@ -421,8 +421,7 @@ function buildPage(records: WordRecord[], date: string): string {
           markPlaying(playBtn, true);
 
           var word     = playBtn.dataset.word;
-          var reading  = playBtn.dataset.reading;
-          var wordText = word + '。' + reading;
+          var wordText = word;
           var card     = playBtn.closest('.word-card');
           var wordAudioEl = card.querySelector('.audio-word');
 
