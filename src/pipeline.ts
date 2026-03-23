@@ -29,12 +29,13 @@ export interface PipelineResult {
 async function enrichRecords(
   records: WordRecord[],
   config: AppConfig,
-  htmlDir: string
+  htmlDir: string,
+  slug: string
 ): Promise<void> {
   const ttsProvider = resolveProvider(config);
   if (ttsProvider !== 'browser') {
     for (let i = 0; i < records.length; i++) {
-      const result = await generateAudio(records[i], i, config, htmlDir);
+      const result = await generateAudio(records[i], i, config, htmlDir, slug);
       if (result) {
         records[i].wordAudioFile = result.wordAudioFile;
         records[i].audioProvider = result.provider;
@@ -218,7 +219,7 @@ export async function runPipeline(
   console.log(`[pipeline] Collected ${collectedWords.length} word(s). Generating audio...`);
 
   const htmlDir = path.resolve(process.cwd(), config.output.html);
-  await enrichRecords(collectedWords, config, htmlDir);
+  await enrichRecords(collectedWords, config, htmlDir, date);
 
   console.log('[pipeline] Writing outputs...');
   const outputPaths = writeRunOutputs(collectedWords, date, config, 'auto');
@@ -292,7 +293,7 @@ export async function runWordPipeline(
   }
 
   const htmlDir = path.resolve(process.cwd(), config.output.html);
-  await enrichRecords([record], config, htmlDir);
+  await enrichRecords([record], config, htmlDir, date);
 
   const outputPaths = writeRunOutputs([record], date, config, 'manual');
 
@@ -345,7 +346,7 @@ export async function runSourcePipeline(
   }
 
   const htmlDir = path.resolve(process.cwd(), config.output.html);
-  await enrichRecords([record], config, htmlDir);
+  await enrichRecords([record], config, htmlDir, date);
 
   const outputPaths = writeRunOutputs([record], date, config, 'manual');
 
@@ -393,7 +394,7 @@ export async function runUrlPipeline(
   const [record] = words;
 
   const htmlDir = path.resolve(process.cwd(), config.output.html);
-  await enrichRecords([record], config, htmlDir);
+  await enrichRecords([record], config, htmlDir, date);
 
   const outputPaths = writeRunOutputs([record], date, config, 'manual');
 

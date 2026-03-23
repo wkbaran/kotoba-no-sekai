@@ -51,7 +51,8 @@ export async function generateAudio(
   record: WordRecord,
   wordIndex: number,
   config: AppConfig,
-  htmlOutputDir: string
+  htmlOutputDir: string,
+  slug: string
 ): Promise<TtsResult | null> {
   const provider = resolveProvider(config);
 
@@ -59,9 +60,9 @@ export async function generateAudio(
   if (config.tts.provider === 'disabled') return null;
 
   const audioDir = path.join(htmlOutputDir, 'audio');
-  const prefix = `${record.date}-${wordIndex}`;
+  const prefix = `${slug}-${wordIndex}`;
 
-  const wordText = record.word;
+  const wordText = record.reading || record.word;
   const wordFilename = `${prefix}-word.mp3`;
   const wordFilePath = path.join(audioDir, wordFilename);
 
