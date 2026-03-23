@@ -76,9 +76,12 @@ export async function fetchFeedArticles(source: FeedSource): Promise<ArticleCont
 
 /** Strip HTML tags and decode common entities. */
 export function stripHtml(html: string): string {
+  // Block-level tags become paragraph breaks so sentences don't cross block boundaries
+  const BLOCK_TAG_RE = /<\/?(p|div|article|section|h[1-6]|li|ul|ol|blockquote|table|tr|td|th|dt|dd|pre)[^>]*>/gi;
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(BLOCK_TAG_RE, '\n\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -86,6 +89,7 @@ export function stripHtml(html: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

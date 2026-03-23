@@ -1,5 +1,8 @@
 import * as cheerio from 'cheerio';
 
+// Block-level elements whose text should be kept as separate segments
+const BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, dt, dd';
+
 /**
  * Fetch an article URL and extract readable body text.
  * Tries common content selectors before falling back to <body>.
@@ -49,12 +52,35 @@ function extractText(html: string): string {
   for (const selector of contentSelectors) {
     const el = $(selector).first();
     if (el.length && el.text().trim().length > 100) {
-      return cleanText(el.text());
+      return extractBlockTexts($, el);
     }
   }
 
   // Last resort: full body
-  return cleanText($('body').text());
+  return extractBlockTexts($, $('body'));
+}
+
+/**
+ * Extract text from block-level elements individually, joined by double newlines.
+ * This ensures sentences never cross block boundaries (e.g. between <p> tags or
+ * into navigation links). Inline elements like <a> and <span> are included as
+ * part of their containing block.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractBlockTexts($: ReturnType<typeof cheerio.load>, container: any): string {
+  const segments: string[] = [];
+
+  container.find(BLOCK_SELECTOR).each((_: number, el: cheerio.BasicAcceptedElems<any>) => {
+    const $el = $(el);
+    // Skip elements nested inside another block we'll collect, to avoid duplicates
+    // (e.g. <p> inside <blockquote> — collect only the outer block)
+    if ($el.parents(BLOCK_SELECTOR).length > 0) return;
+    const text = cleanText($el.text());
+    if (text.length >= 10) segments.push(text);
+  });
+
+  // Fall back to full container text if no block elements were found
+  return segments.length > 0 ? segments.join('\n\n') : cleanText(container.text());
 }
 
 function cleanText(text: string): string {

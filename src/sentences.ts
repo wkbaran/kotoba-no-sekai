@@ -6,10 +6,14 @@ const SENTENCE_END = /(?<=[。！？…])\s*/;
 // Max character length for an example clause
 const MAX_CLAUSE_LEN = 120;
 
-/** Split Japanese text into sentences. */
+/** Split Japanese text into sentences, respecting block boundaries. */
 export function splitSentences(text: string): string[] {
+  // First split on paragraph/block boundaries (\n\n) so sentences never
+  // cross block-level HTML element boundaries (e.g. separate <p> tags).
+  // Then split each block on Japanese sentence-ending punctuation.
   return text
-    .split(SENTENCE_END)
+    .split(/\n\n+/)
+    .flatMap(para => para.split(SENTENCE_END))
     .map(s => s.trim())
     .filter(s => s.length >= 10 && s.length <= 300);
 }
