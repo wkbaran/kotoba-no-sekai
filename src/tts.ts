@@ -156,6 +156,7 @@ async function synthesizeElevenLabs(text: string, config: AppConfig): Promise<Bu
     body: JSON.stringify({
       text,
       model_id,
+      language_code: 'ja',
       voice_settings: {
         stability: 0.5,
         similarity_boost: 0.75,
