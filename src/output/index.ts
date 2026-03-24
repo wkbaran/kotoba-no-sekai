@@ -580,7 +580,22 @@ export function writeIndexOutput(
 /**
  * Rebuild index.html, manual.html, and words.html from existing manifests + digest files on disk.
  */
-export function rebuildIndexOutput(outputDir: string): void {
+function loadWordsFromJson(jsonOutputDir: string, date: string): Pick<ManifestEntry, 'wordCount' | 'words'> {
+  try {
+    const jsonPath = path.resolve(process.cwd(), jsonOutputDir, `words-${date}.json`);
+    if (!fs.existsSync(jsonPath)) return { wordCount: 0, words: [] };
+    const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    const records: WordRecord[] = data.fullRecords ?? data;
+    return {
+      wordCount: records.length,
+      words: records.map(r => ({ word: r.word, definition: r.definition, jlptLevel: r.jlptLevel })),
+    };
+  } catch {
+    return { wordCount: 0, words: [] };
+  }
+}
+
+export function rebuildIndexOutput(outputDir: string, jsonOutputDir: string): void {
   const resolvedDir = path.resolve(process.cwd(), outputDir);
 
   for (const mode of ['auto', 'manual'] as RunMode[]) {
@@ -594,7 +609,7 @@ export function rebuildIndexOutput(outputDir: string): void {
         for (const f of fs.readdirSync(resolvedDir)) {
           const m = f.match(/^digest-(\d{4}-\d{2}-\d{2}(?:-\d+)?)\.html$/);
           if (m && !known.has(m[1])) {
-            entries.push({ date: m[1], wordCount: 0, words: [], file: f });
+            entries.push({ date: m[1], file: f, ...loadWordsFromJson(jsonOutputDir, m[1]) });
             known.add(m[1]);
           }
         }

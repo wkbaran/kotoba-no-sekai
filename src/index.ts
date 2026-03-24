@@ -98,7 +98,7 @@ async function main(): Promise<void> {
 
   // Utility commands — run immediately without loading feeds or printing the pipeline header
   if (args['rebuild-index']) {
-    rebuildIndexOutput(config.output.html);
+    rebuildIndexOutput(config.output.html, config.output.json);
     return;
   }
 
