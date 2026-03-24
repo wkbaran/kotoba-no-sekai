@@ -584,7 +584,9 @@ export function rebuildIndexOutput(outputDir: string): void {
   const resolvedDir = path.resolve(process.cwd(), outputDir);
 
   for (const mode of ['auto', 'manual'] as RunMode[]) {
-    const entries = loadManifest(outputDir, mode);
+    // Remove entries whose digest file no longer exists on disk
+    let entries = loadManifest(outputDir, mode)
+      .filter(e => fs.existsSync(path.join(resolvedDir, e.file)));
     const known = new Set(entries.map(e => e.date));
 
     if (mode === 'auto') {

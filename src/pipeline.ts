@@ -144,7 +144,7 @@ async function processArticle(
       sourceUrl: article.url,
       domain: article.domain,
       jlptLevel: dictResult.jlptLevel,
-      date: new Date().toISOString().split('T')[0],
+      date: new Date().toLocaleDateString('en-CA'),
     };
 
     console.log(`[pipeline] ✓ ${record.word}【${record.reading}】 ${record.jlptLevel} (${record.pos})`);
@@ -283,7 +283,7 @@ export async function runWordPipeline(
       sourceUrl: article.url,
       domain: article.domain,
       jlptLevel: dictResult.jlptLevel,
-      date: new Date().toISOString().split('T')[0],
+      date: new Date().toLocaleDateString('en-CA'),
     };
 
     console.log(`[pipeline] ✓ ${record.word}【${record.reading}】 ${record.jlptLevel} (${record.pos})`);

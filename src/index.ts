@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     config = { ...config, max_words_per_run: n };
   }
 
-  const date = new Date().toISOString().split('T')[0];
+  const date = new Date().toLocaleDateString('en-CA');
 
   console.log('');
   console.log('  言葉の世界 — World of Words');
