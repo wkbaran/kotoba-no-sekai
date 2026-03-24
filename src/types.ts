@@ -97,8 +97,10 @@ export interface ExampleSentence {
   /** Plain text version (no HTML tags) */
   plain: string;
   sourceUrl: string;
-  /** Relative path from output/web/ to generated audio file, if any */
+  /** Relative paths from output/web/ to generated audio files, if any */
   audioFile?: string;
+  audioFileSlow?: string;
+  audioFileVslow?: string;
   /** English translation of the example sentence */
   translation?: string;
   /** HTML-escaped translation with the definition keyword wrapped in <mark> */
@@ -126,8 +128,10 @@ export interface WordRecord {
   jlptLevel: JlptLevel;
   /** ISO date string of the run */
   date: string;
-  /** Relative path from output/web/ to word pronunciation audio file, if any */
+  /** Relative paths from output/web/ to word pronunciation audio files, if any */
   wordAudioFile?: string;
+  wordAudioFileSlow?: string;
+  wordAudioFileVslow?: string;
   /** Which TTS provider generated the audio (for display purposes) */
   audioProvider?: 'openai' | 'elevenlabs';
 }

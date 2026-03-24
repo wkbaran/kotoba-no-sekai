@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(ls /c/Users/billb/projects/kotoba-no-sekai/output/web/digest-*.html)",
+      "Bash(ls /c/Users/billb/projects/kotoba-no-sekai/output/web/audio/*.mp3)",
+      "Bash(node:*)",
+      "Bash(ls:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:elevenlabs.io)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

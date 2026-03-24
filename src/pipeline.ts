@@ -37,11 +37,15 @@ async function enrichRecords(
     for (let i = 0; i < records.length; i++) {
       const result = await generateAudio(records[i], i, config, htmlDir, slug);
       if (result) {
-        records[i].wordAudioFile = result.wordAudioFile;
+        records[i].wordAudioFile      = result.wordAudioFile;
+        records[i].wordAudioFileSlow  = result.wordAudioFileSlow;
+        records[i].wordAudioFileVslow = result.wordAudioFileVslow;
         records[i].audioProvider = result.provider;
         for (let j = 0; j < result.exampleAudioFiles.length; j++) {
           if (records[i].examples[j]) {
-            records[i].examples[j].audioFile = result.exampleAudioFiles[j];
+            records[i].examples[j].audioFile      = result.exampleAudioFiles[j];
+            records[i].examples[j].audioFileSlow  = result.exampleAudioFilesSlow[j];
+            records[i].examples[j].audioFileVslow = result.exampleAudioFilesVslow[j];
           }
         }
       }

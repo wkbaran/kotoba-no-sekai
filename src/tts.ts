@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 import type { AppConfig, TtsProvider, WordRecord } from './types.js';
 
 // ── Provider resolution ───────────────────────────────────
@@ -38,8 +39,12 @@ export function resolveProvider(config: AppConfig): ResolvedProvider {
 
 export interface TtsResult {
   provider: 'openai' | 'elevenlabs';
-  wordAudioFile: string;       // relative to output/web/
-  exampleAudioFiles: string[]; // relative to output/web/
+  wordAudioFile: string;
+  wordAudioFileSlow?: string;
+  wordAudioFileVslow?: string;
+  exampleAudioFiles: string[];
+  exampleAudioFilesSlow: string[];
+  exampleAudioFilesVslow: string[];
 }
 
 /**
@@ -61,41 +66,56 @@ export async function generateAudio(
 
   const audioDir = path.join(htmlOutputDir, 'audio');
   const prefix = `${slug}-${wordIndex}`;
-
   const wordText = record.reading || record.word;
-  const wordFilename = `${prefix}-word.mp3`;
-  const wordFilePath = path.join(audioDir, wordFilename);
 
-  const exampleFilenames: string[] = [];
+  const speeds = [
+    { speed: 1.0,  suffix: ''       },
+    { speed: 0.75, suffix: '-slow'  },
+    { speed: 0.5,  suffix: '-vslow' },
+  ] as const;
 
   console.log(`[tts] ${provider} → ${record.word} (${record.examples.length} example(s))`);
 
-  try {
-    // Generate word audio
-    const wordAudio = await synthesize(wordText, provider, config);
-    if (!wordAudio) return null;
-    fs.writeFileSync(wordFilePath, wordAudio);
-
-    // Generate example sentence audio
-    for (let i = 0; i < record.examples.length; i++) {
-      const exFilename = `${prefix}-ex${i}.mp3`;
-      const exFilePath = path.join(audioDir, exFilename);
-      const exAudio = await synthesize(record.examples[i].plain, provider, config);
-      if (exAudio) {
-        fs.writeFileSync(exFilePath, exAudio);
-        exampleFilenames.push(`audio/${exFilename}`);
-      }
+  async function gen(text: string, filename: string, speed: number): Promise<string | undefined> {
+    try {
+      const audio = await synthesize(text, provider, config, speed);
+      if (!audio) return undefined;
+      fs.writeFileSync(path.join(audioDir, filename), audio);
+      return `audio/${filename}`;
+    } catch (err) {
+      console.warn(`[tts] Failed "${filename}" at ${speed}×: ${(err as Error).message}`);
+      return undefined;
     }
-
-    return {
-      provider,
-      wordAudioFile: `audio/${wordFilename}`,
-      exampleAudioFiles: exampleFilenames,
-    };
-  } catch (err) {
-    console.warn(`[tts] Failed for "${record.word}": ${(err as Error).message}`);
-    return null;
   }
+
+  const wordNormal = await gen(wordText, `${prefix}-word.mp3`,       1.0);
+  if (!wordNormal) return null;
+  const wordSlow   = await gen(wordText, `${prefix}-word-slow.mp3`,  0.85);
+  const wordVslow  = await gen(wordText, `${prefix}-word-vslow.mp3`, 0.7);
+
+  const exNormal: string[] = [];
+  const exSlow:   string[] = [];
+  const exVslow:  string[] = [];
+
+  for (let i = 0; i < record.examples.length; i++) {
+    const text = record.examples[i].plain;
+    const n = await gen(text, `${prefix}-ex${i}.mp3`,       1.0);
+    const s = await gen(text, `${prefix}-ex${i}-slow.mp3`,  0.85);
+    const v = await gen(text, `${prefix}-ex${i}-vslow.mp3`, 0.7);
+    if (n) exNormal.push(n);
+    if (s) exSlow.push(s);
+    if (v) exVslow.push(v);
+  }
+
+  return {
+    provider,
+    wordAudioFile:      wordNormal,
+    wordAudioFileSlow:  wordSlow,
+    wordAudioFileVslow: wordVslow,
+    exampleAudioFiles:      exNormal,
+    exampleAudioFilesSlow:  exSlow,
+    exampleAudioFilesVslow: exVslow,
+  };
 }
 
 // ── Synthesis dispatch ────────────────────────────────────
@@ -103,16 +123,17 @@ export async function generateAudio(
 async function synthesize(
   text: string,
   provider: ResolvedProvider,
-  config: AppConfig
+  config: AppConfig,
+  speed: number
 ): Promise<Buffer | null> {
-  if (provider === 'openai') return synthesizeOpenAI(text, config);
-  if (provider === 'elevenlabs') return synthesizeElevenLabs(text, config);
+  if (provider === 'openai') return synthesizeOpenAI(text, config, speed);
+  if (provider === 'elevenlabs') return synthesizeElevenLabs(text, config, speed);
   return null;
 }
 
 // ── OpenAI TTS ────────────────────────────────────────────
 
-async function synthesizeOpenAI(text: string, config: AppConfig): Promise<Buffer | null> {
+async function synthesizeOpenAI(text: string, config: AppConfig, speed: number): Promise<Buffer | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
 
@@ -127,6 +148,7 @@ async function synthesizeOpenAI(text: string, config: AppConfig): Promise<Buffer
       voice: config.tts.openai.voice,
       input: text,
       response_format: 'mp3',
+      speed,
     }),
     signal: AbortSignal.timeout(30000),
   });
@@ -141,35 +163,29 @@ async function synthesizeOpenAI(text: string, config: AppConfig): Promise<Buffer
 
 // ── ElevenLabs TTS ────────────────────────────────────────
 
-async function synthesizeElevenLabs(text: string, config: AppConfig): Promise<Buffer | null> {
+async function synthesizeElevenLabs(text: string, config: AppConfig, speed: number): Promise<Buffer | null> {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) return null;
 
   const { voice_id, model_id } = config.tts.elevenlabs;
 
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': key,
-      'Content-Type': 'application/json',
-      'Accept': 'audio/mpeg',
+  const client = new ElevenLabsClient({ apiKey: key });
+
+  const stream = await client.textToSpeech.convert(voice_id, {
+    text,
+    modelId: model_id,
+    languageCode: 'ja',
+    outputFormat: 'mp3_44100_128',
+    voiceSettings: {
+      stability: 0.5,
+      similarityBoost: 0.75,
+      speed,
     },
-    body: JSON.stringify({
-      text,
-      model_id,
-      language_code: 'ja',
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-      },
-    }),
-    signal: AbortSignal.timeout(30000),
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`ElevenLabs TTS HTTP ${res.status}: ${body.slice(0, 200)}`);
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.from(chunk));
   }
-
-  return Buffer.from(await res.arrayBuffer());
+  return Buffer.concat(chunks);
 }
