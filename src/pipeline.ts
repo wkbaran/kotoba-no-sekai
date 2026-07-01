@@ -3,11 +3,12 @@ import type {
   FeedSource,
   WordRecord,
   ArticleContent,
+  ArticleStub,
 } from './types.js';
 import { WordDatabase } from './db.js';
-import { fetchFeedArticles, shuffle } from './rss.js';
+import { fetchFeedArticles, listFeedItems, resolveArticleText, shuffle } from './feeds.js';
 import { getTokenizer, extractCandidates } from './tokenizer.js';
-import { lookupWord, levelMatches } from './dictionary.js';
+import { lookupWord, levelMatches, createSerialLookup, type DictionaryResult } from './dictionary.js';
 import { findExamples } from './sentences.js';
 import { writeJsonOutput } from './output/json.js';
 import { writeMarkdownOutput } from './output/markdown.js';
@@ -101,6 +102,33 @@ async function fetchAllArticles(
   return all;
 }
 
+/**
+ * List stubs from all feeds (parallel, metadata-only) and merge them round-robin
+ * by feed, each feed's own list newest-first. This keeps any one large/frequent
+ * feed (e.g. NHK Life & Society) from crowding out smaller ones purely on volume,
+ * while still preferring the freshest article within each feed's own turn.
+ */
+export async function buildDiversifiedQueue(feeds: FeedSource[]): Promise<ArticleStub[]> {
+  const perFeed = await Promise.all(feeds.map(listFeedItems));
+  const lists = perFeed.map(stubs => [...stubs].sort((a, b) => b.publishedAt - a.publishedAt));
+
+  const queue: ArticleStub[] = [];
+  const cursors = lists.map(() => 0);
+  let remaining = true;
+  while (remaining) {
+    remaining = false;
+    for (let i = 0; i < lists.length; i++) {
+      const idx = cursors[i];
+      if (idx < lists[i].length) {
+        queue.push(lists[i][idx]);
+        cursors[i] = idx + 1;
+        remaining = true;
+      }
+    }
+  }
+  return queue;
+}
+
 // ── Article processor ─────────────────────────────────────
 
 async function processArticle(
@@ -108,7 +136,9 @@ async function processArticle(
   config: AppConfig,
   db: WordDatabase,
   tokenizer: Awaited<ReturnType<typeof getTokenizer>>,
-  maxWords = config.max_words_per_run
+  maxWords = config.max_words_per_run,
+  lookup: (word: string) => Promise<DictionaryResult | null> = w => lookupWord(w, config.jisho_delay_ms),
+  attempted: Set<string> = new Set()
 ): Promise<WordRecord[]> {
   const candidates = extractCandidates(article.text, tokenizer, config.min_word_length);
   const results: WordRecord[] = [];
@@ -116,9 +146,11 @@ async function processArticle(
   for (const candidate of candidates) {
     if (results.length >= maxWords) break;
 
+    if (attempted.has(candidate.baseForm)) continue;
     if (db.hasSeen(candidate.baseForm, candidate.reading)) continue;
+    attempted.add(candidate.baseForm);
 
-    const dictResult = await lookupWord(candidate.baseForm, config.jisho_delay_ms);
+    const dictResult = await lookup(candidate.baseForm);
     if (!dictResult) continue;
 
     if (!levelMatches(dictResult.jlptLevel, config.level)) continue;
@@ -166,20 +198,43 @@ export async function runPipeline(
 
   console.log(`[pipeline] Target: ${config.max_words_per_run} words at level "${config.level}"`);
 
-  const collectedPairs: { article: ArticleContent; record: WordRecord }[] = [];
-  const usedSources: string[] = [];
+  const queue = await buildDiversifiedQueue(feeds);
+  const jishoLookup = createSerialLookup(config.jisho_delay_ms);
+  const attemptedBaseForms = new Set<string>();
 
-  const allArticles = await fetchAllArticles(feeds);
+  const collectedPairs: { article: ArticleContent; record: WordRecord; feedName: string }[] = [];
+  let cursor = 0;
 
-  for (const { article, feedName } of allArticles) {
-    if (collectedPairs.length >= config.max_words_per_run) break;
+  async function worker(): Promise<void> {
+    for (;;) {
+      if (collectedPairs.length >= config.max_words_per_run) return;
+      const stub = queue[cursor];
+      if (!stub) return;
+      cursor++;
 
-    const newWords = await processArticle(article, config, db, tokenizer, 1);
-    if (newWords.length > 0) {
-      collectedPairs.push({ article, record: newWords[0] });
-      usedSources.push(feedName);
+      const text = await resolveArticleText(stub);
+      if (text.trim().length < 50) continue;
+
+      const article: ArticleContent = { url: stub.url, title: stub.title, domain: stub.domain, text };
+      const [record] = await processArticle(article, config, db, tokenizer, 1, jishoLookup, attemptedBaseForms);
+      // Re-check the cap here (not just at the top of the loop): other workers may
+      // have finished concurrently while this one was scraping/looking up, and
+      // without this guard the run could overshoot by up to fetch_concurrency - 1.
+      if (record) {
+        if (collectedPairs.length < config.max_words_per_run) {
+          collectedPairs.push({ article, record, feedName: stub.feedName });
+        } else {
+          console.log(`[pipeline] ✗ ${record.word}【${record.reading}】 discarded — already reached ${config.max_words_per_run} word(s)`);
+        }
+      }
     }
   }
+
+  await Promise.all(
+    Array.from({ length: config.fetch_concurrency }, () => worker())
+  );
+
+  const usedSources = collectedPairs.map(p => p.feedName);
 
   if (collectedPairs.length === 0) {
     console.warn('[pipeline] No new words found. All candidates may already be in the database.');

@@ -31,6 +31,8 @@ export interface AppConfig {
   max_examples_per_word: number;
   min_word_length: number;
   jisho_delay_ms: number;
+  /** Number of articles to scrape/analyze concurrently while searching for words. */
+  fetch_concurrency: number;
   output: {
     json: string;
     html: string;
@@ -62,11 +64,32 @@ export interface AppConfig {
   };
 }
 
+/**
+ * Describes how to pull articles out of an arbitrary JSON API response.
+ * Field paths use dot notation to reach nested properties (e.g. "article.url").
+ */
+export interface JsonFeedMapping {
+  /** Dot path to the array of items within the response. Omit if the response root is the array. */
+  itemsPath?: string;
+  /** Dot path (within each item) to the article URL. Required. */
+  urlField: string;
+  /** Dot path (within each item) to the article title. */
+  titleField?: string;
+  /** Dot path (within each item) to inline article body/HTML, if the API embeds it. */
+  contentField?: string;
+  /** Dot path (within each item) to a parseable publish date/timestamp, for newest-first ordering. */
+  dateField?: string;
+}
+
 export interface FeedSource {
   url: string;
   domain: string;
   name: string;
   enabled: boolean;
+  /** Feed format. Defaults to 'rss' when omitted. */
+  type?: 'rss' | 'json';
+  /** Required when type is 'json'; describes how to read articles out of the response. */
+  json?: JsonFeedMapping;
 }
 
 export interface SourcesConfig {
@@ -80,6 +103,21 @@ export interface ArticleContent {
   title: string;
   domain: string;
   text: string; // plain text, sentences separated by spaces
+}
+
+/**
+ * Lightweight article metadata listed from a feed before its full text is fetched.
+ * Lets the pipeline sort/select articles (by date, by feed) before paying for a scrape.
+ */
+export interface ArticleStub {
+  url: string;
+  title: string;
+  domain: string;
+  feedName: string;
+  /** Epoch ms of the publish date, or 0 if unknown/unparseable. */
+  publishedAt: number;
+  /** Raw HTML body already present in the feed, if any (avoids a scrape when long enough). */
+  inlineText?: string;
 }
 
 export interface CandidateToken {

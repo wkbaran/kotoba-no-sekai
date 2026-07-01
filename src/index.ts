@@ -180,7 +180,7 @@ async function dryRun(
   config: ReturnType<typeof loadConfig>,
   feeds: ReturnType<typeof loadSources>
 ): Promise<void> {
-  const { fetchFeedArticles, shuffle } = await import('./rss.js');
+  const { fetchFeedArticles, shuffle } = await import('./feeds.js');
   const { getTokenizer, extractCandidates } = await import('./tokenizer.js');
 
   const tokenizer = await getTokenizer();

@@ -127,3 +127,20 @@ export async function lookupWord(
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+/**
+ * Returns a lookup function that serializes calls to lookupWord, one at a time,
+ * regardless of how many callers invoke it concurrently. Lets article scraping
+ * run concurrently while keeping Jisho traffic exactly as polite (one in-flight
+ * request, `delayMs` apart) as the original single-threaded pipeline.
+ */
+export function createSerialLookup(
+  delayMs: number
+): (word: string) => Promise<DictionaryResult | null> {
+  let chain: Promise<unknown> = Promise.resolve();
+  return (word: string): Promise<DictionaryResult | null> => {
+    const result = chain.then(() => lookupWord(word, delayMs));
+    chain = result;
+    return result;
+  };
+}

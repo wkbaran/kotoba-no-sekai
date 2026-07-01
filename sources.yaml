@@ -1,17 +1,25 @@
-# Kotoba no Sekai — RSS Feed Sources
+# Kotoba no Sekai — Feed Sources
 #
 # Each feed needs:
-#   url:     Full RSS/Atom feed URL
+#   url:     Full RSS/Atom feed URL, or JSON API URL when type is "json"
 #   domain:  Tag applied to every word found in this feed (e.g. news, science, food)
 #   name:    Human-readable label (used in logs and output)
 #   enabled: Set to false to temporarily disable without deleting the entry
+#   type:    "rss" (default) or "json"
+#   json:    Required when type is "json" — see the example below.
 #
 # Bootstrap suggestions — uncomment and verify URLs before use:
 #
-# NHK Web Easy (simplified news, great for beginners):
-#   url: https://www3.nhk.or.jp/news/easy/k10012345678000/k10012345678000.rss
+# Example JSON feed (see src/json-feed.ts for the fetch/mapping logic):
+#   url: https://example.com/api/articles.json
 #   domain: news
-#   name: NHK Web Easy
+#   name: Example JSON Source
+#   type: json
+#   json:
+#     itemsPath: data.articles   # dot path to the array within the response; omit if the root is the array
+#     urlField: url              # dot path (per item) to the article URL
+#     titleField: title          # dot path (per item) to the article title
+#     contentField: body         # dot path (per item) to inline HTML/body text, if present
 #
 # NHK News (standard news, N3–N1 vocabulary):
 #   url: https://www3.nhk.or.jp/rss/news/cat0.xml
@@ -39,10 +47,16 @@
 #   name: Wikipedia JP Featured
 
 feeds:
-  - url: https://www3.nhk.or.jp/news/easy/k10012345678000/k10012345678000.rss
+  # NHK's own News Web Easy site gates its article list behind a JWT-authenticated
+  # API and its robots.txt explicitly disallows AI crawlers site-wide, so we pull
+  # from nhkeasier.com instead: a third-party mirror ("NHK Easier is not
+  # affiliated with NHK") that explicitly advertises "a valid RSS feed to use in
+  # your news aggregator" as a feature. Permissive robots.txt, full article text
+  # (with furigana) inline in the feed — no scraping needed.
+  - url: https://nhkeasier.com/feed/
     domain: news
-    name: NHK Web Easy
-    enabeld: true
+    name: NHK Web Easy (via NHK Easier)
+    enabled: true
 
   - url: https://www3.nhk.or.jp/rss/news/cat0.xml
     domain: news
@@ -62,4 +76,12 @@ feeds:
   - url: https://www.asahi.com/rss/asahi/newsheadlines.rdf
     domain: news
     name: Asahi Shimbun
+    enabled: true
+
+  # JLPT-level-tagged easy-Japanese web magazine. Updates infrequently (feed's
+  # lastBuildDate lags by months), so under the new date-sorted selection it may
+  # rarely surface — kept enabled since it's free content when it does update.
+  - url: https://watanoc.com/feed
+    domain: news
+    name: Watanoc
     enabled: true

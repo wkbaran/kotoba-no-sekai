@@ -20,7 +20,13 @@ max_examples_per_word: 3
 min_word_length: 2
 
 # Delay between Jisho API calls in milliseconds. Be courteous to the free API.
+# Enforced globally (one lookup in flight at a time) regardless of fetch_concurrency.
 jisho_delay_ms: 600
+
+# Number of articles to scrape and tokenize concurrently while searching for
+# words, newest-first per feed. Only affects article fetching/scraping — Jisho
+# lookups always run one at a time (see jisho_delay_ms above).
+fetch_concurrency: 3
 
 # Output directories (relative to working directory, or absolute).
 output:

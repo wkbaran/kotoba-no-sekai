@@ -9,6 +9,7 @@ const DEFAULTS: AppConfig = {
   max_examples_per_word: 2,
   min_word_length: 2,
   jisho_delay_ms: 600,
+  fetch_concurrency: 3,
   output: {
     json: 'output/data',
     html: 'output/web',

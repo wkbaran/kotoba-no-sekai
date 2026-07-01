@@ -1,5 +1,5 @@
 import RSSParser from 'rss-parser';
-import type { FeedSource, ArticleContent } from './types.js';
+import type { FeedSource, ArticleContent, ArticleStub } from './types.js';
 import { scrapeArticleText } from './scraper.js';
 
 type FeedItem = {
@@ -32,7 +32,7 @@ export function shuffle<T>(arr: T[]): T[] {
  * Falls back gracefully: tries contentEncoded → content → description,
  * then optionally fetches the full article page.
  */
-export async function fetchFeedArticles(source: FeedSource): Promise<ArticleContent[]> {
+export async function fetchRssFeedArticles(source: FeedSource): Promise<ArticleContent[]> {
   console.log(`[rss] Fetching ${source.name} (${source.url})`);
 
   let feed: Awaited<ReturnType<typeof parser.parseURL>>;
@@ -74,6 +74,48 @@ export async function fetchFeedArticles(source: FeedSource): Promise<ArticleCont
   return articles;
 }
 
+/**
+ * List articles from a feed as lightweight stubs, without fetching full article
+ * text. Lets the caller sort/select by date and feed before paying for a scrape.
+ */
+export async function listRssFeedItems(source: FeedSource): Promise<ArticleStub[]> {
+  console.log(`[rss] Listing ${source.name} (${source.url})`);
+
+  let feed: Awaited<ReturnType<typeof parser.parseURL>>;
+  try {
+    feed = await parser.parseURL(source.url);
+  } catch (err) {
+    console.warn(`[rss] Failed to fetch ${source.name}: ${(err as Error).message}`);
+    return [];
+  }
+
+  const stubs: ArticleStub[] = [];
+
+  for (const item of feed.items ?? []) {
+    const url = item.link ?? '';
+    if (!url) continue;
+
+    stubs.push({
+      url,
+      title: item.title ?? '',
+      domain: source.domain,
+      feedName: source.name,
+      publishedAt: parseDate(item.isoDate ?? item.pubDate),
+      inlineText: item.contentEncoded ?? item.content ?? undefined,
+    });
+  }
+
+  console.log(`[rss] ${source.name}: ${stubs.length} articles`);
+  return stubs;
+}
+
+/** Parse a date string to epoch ms, returning 0 if missing or unparseable. */
+export function parseDate(value: string | undefined): number {
+  if (!value) return 0;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 /** Strip HTML tags and decode common entities. */
 export function stripHtml(html: string): string {
   // Block-level tags become paragraph breaks so sentences don't cross block boundaries
@@ -81,6 +123,11 @@ export function stripHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
+    // Furigana: drop the reading entirely and unwrap <ruby> to '' (not a space),
+    // so e.g. <ruby>鹿児島県<rt>かごしまけん</rt></ruby> becomes 鹿児島県, not
+    // "鹿児島県かごしまけん" (concatenated) or " 鹿児島県 " (spurious spaces).
+    .replace(/<rt>[\s\S]*?<\/rt>/gi, '')
+    .replace(/<\/?ruby>/gi, '')
     .replace(BLOCK_TAG_RE, '\n\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
