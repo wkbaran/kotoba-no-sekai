@@ -109,6 +109,25 @@ export class WordDatabase {
     }
   }
 
+  /**
+   * Fill in record_json for a seen word that doesn't have one yet, so it
+   * becomes eligible for review. Returns 'updated', 'already-had-one', or
+   * 'not-found' (no matching seen_words row for this word/reading).
+   */
+  backfillSnapshot(record: WordRecord): 'updated' | 'already-had-one' | 'not-found' {
+    const row = this.db
+      .prepare('SELECT record_json FROM seen_words WHERE word = ? AND reading = ?')
+      .get(record.word, record.reading) as { record_json: string | null } | undefined;
+
+    if (!row) return 'not-found';
+    if (row.record_json) return 'already-had-one';
+
+    this.db
+      .prepare('UPDATE seen_words SET record_json = ? WHERE word = ? AND reading = ?')
+      .run(JSON.stringify(record), record.word, record.reading);
+    return 'updated';
+  }
+
   markReviewed(word: string, reading: string, date: string): void {
     this.db
       .prepare('UPDATE seen_words SET last_reviewed_at = ? WHERE word = ? AND reading = ?')

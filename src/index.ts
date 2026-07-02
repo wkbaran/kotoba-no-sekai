@@ -13,13 +13,18 @@
  *   kotoba --source "NHK News"     # select one word from a named source
  *   kotoba --url https://...       # select one word from a specific article URL
  *   kotoba --rebuild-index         # rebuild index pages without running the pipeline
+ *   kotoba --backfill-reviews      # populate review snapshots from historical words-*.json files
  *   kotoba --help
  */
 
+import fs from 'fs';
+import path from 'path';
 import { loadConfig, loadSources, ensureOutputDirs, resolveRunSlug } from './config.js';
 import { runPipeline, runWordPipeline, runSourcePipeline, runUrlPipeline } from './pipeline.js';
 import { rebuildIndexOutput } from './output/index.js';
 import { publishOutput } from './publish.js';
+import { WordDatabase } from './db.js';
+import type { WordRecord } from './types.js';
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const args: Record<string, string | boolean> = {};
@@ -31,6 +36,8 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
       args['dry-run'] = true;
     } else if (arg === '--rebuild-index') {
       args['rebuild-index'] = true;
+    } else if (arg === '--backfill-reviews') {
+      args['backfill-reviews'] = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const next = argv[i + 1];
@@ -63,6 +70,7 @@ OPTIONS
   --url     <url>     Fetch a specific article URL and select one word from it
   --publish           Sync output/web/ to the configured S3 or R2 bucket, then exit
   --rebuild-index     Rebuild index.html / manual.html / words.html, then exit
+  --backfill-reviews  Populate review snapshots from historical words-*.json, then exit
   --help, -h          Show this help
 
 OUTPUTS (written to paths configured in config.yaml)
@@ -104,6 +112,11 @@ async function main(): Promise<void> {
 
   if (args['publish']) {
     await publishOutput(config);
+    return;
+  }
+
+  if (args['backfill-reviews']) {
+    backfillReviewSnapshots(config.output.json, config.database.path);
     return;
   }
 
@@ -174,6 +187,54 @@ async function main(): Promise<void> {
     if (process.env.DEBUG) console.error((err as Error).stack);
     process.exit(1);
   }
+}
+
+/**
+ * One-time recovery utility: scans every historical words-*.json output file
+ * and fills in seen_words.record_json for any word that doesn't have one yet
+ * (i.e. was taught before the review-word feature existed), making it
+ * eligible to be resurfaced for review.
+ */
+function backfillReviewSnapshots(jsonOutputDir: string, databasePath: string): void {
+  const dir = path.resolve(process.cwd(), jsonOutputDir);
+  const files = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter(f => /^words-.*\.json$/.test(f)).sort()
+    : [];
+
+  console.log(`[backfill] Scanning ${files.length} file(s) in ${dir}...`);
+
+  const db = new WordDatabase(databasePath);
+  let scanned = 0, updated = 0, alreadyHadOne = 0, notFound = 0, unreadable = 0;
+
+  for (const file of files) {
+    let data: unknown;
+    try {
+      data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+    } catch {
+      unreadable++;
+      continue;
+    }
+
+    const raw = data as { fullRecords?: WordRecord[] };
+    const records: WordRecord[] = Array.isArray(raw.fullRecords)
+      ? raw.fullRecords
+      : Array.isArray(data) ? (data as WordRecord[]) : [];
+
+    for (const record of records) {
+      scanned++;
+      const result = db.backfillSnapshot(record);
+      if (result === 'updated') updated++;
+      else if (result === 'already-had-one') alreadyHadOne++;
+      else notFound++;
+    }
+  }
+
+  db.close();
+
+  console.log(`[backfill] Scanned ${scanned} historical record(s) across ${files.length} file(s)${unreadable ? ` (${unreadable} unreadable)` : ''}:`);
+  console.log(`[backfill]   ${updated} snapshot(s) added`);
+  console.log(`[backfill]   ${alreadyHadOne} already had a snapshot`);
+  console.log(`[backfill]   ${notFound} had no matching database row (skipped)`);
 }
 
 async function dryRun(
