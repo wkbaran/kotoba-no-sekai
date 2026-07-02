@@ -16,6 +16,14 @@ function Write-Log {
 
 Set-Location $ProjectDir
 
+Write-Log "=== Building ==="
+
+& npm run build 2>&1 | Tee-Object -FilePath $LogFile -Append
+if ($LASTEXITCODE -ne 0) {
+    Write-Log "Build failed with exit code $LASTEXITCODE. Aborting."
+    exit $LASTEXITCODE
+}
+
 Write-Log "=== Starting pipeline ==="
 
 & $NodeExe --env-file-if-exists=.env dist/index.js 2>&1 | Tee-Object -FilePath $LogFile -Append
