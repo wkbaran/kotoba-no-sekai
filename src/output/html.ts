@@ -29,7 +29,7 @@ function renderCard(record: WordRecord): string {
   ], 'audio-word');
 
   const examples = record.examples.map((ex, i) => {
-    const linked = ex.markedHtml.replace(
+    const linked = ex.glossedHtml.replace(
       /<mark>(.*?)<\/mark>/g,
       `<a href="${ex.sourceUrl}" target="_blank" rel="noopener" class="source-link"><mark>$1</mark></a>`
     );
@@ -363,6 +363,25 @@ function buildPage(records: WordRecord[], date: string): string {
 
     .source-link { color: inherit; text-decoration: none; }
     .source-link:hover mark { background: var(--mark-hover); text-decoration: underline; }
+
+    .example rt {
+      font-size: .6em;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .gloss-link {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px dotted var(--muted);
+      cursor: pointer;
+    }
+
+    .gloss-link:hover {
+      border-bottom-color: var(--accent);
+      background: var(--example-border);
+      border-radius: 2px;
+    }
 
     /* ── Footer ── */
     .site-footer {

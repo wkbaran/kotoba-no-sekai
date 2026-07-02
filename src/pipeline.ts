@@ -162,6 +162,7 @@ async function processArticle(
       candidate.surface,
       dictResult.word,
       article.url,
+      tokenizer,
       config.max_examples_per_word
     );
     if (examples.length === 0) continue;
@@ -259,6 +260,7 @@ export async function runPipeline(
         record.word,
         record.word,
         article.url,
+        tokenizer,
         config.max_examples_per_word - record.examples.length
       );
       for (const ex of additional) {
@@ -324,6 +326,7 @@ export async function runWordPipeline(
       match.surface,
       dictResult.word,
       article.url,
+      tokenizer,
       config.max_examples_per_word
     );
     if (examples.length === 0) continue;

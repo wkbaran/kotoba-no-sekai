@@ -132,6 +132,12 @@ export interface CandidateToken {
 export interface ExampleSentence {
   /** Source sentence with target word wrapped in <mark> tags */
   markedHtml: string;
+  /**
+   * Same sentence, but every kanji word carries a furigana <ruby> reading and
+   * (except the target word) links to a Google Translate lookup. Used only by
+   * the HTML digest — Anki/JSON output keeps using markedHtml.
+   */
+  glossedHtml: string;
   /** Plain text version (no HTML tags) */
   plain: string;
   sourceUrl: string;

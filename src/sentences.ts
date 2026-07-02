@@ -1,4 +1,5 @@
 import type { ExampleSentence } from './types.js';
+import { toHiragana, type KuromojiTokenizer } from './tokenizer.js';
 
 // Japanese sentence-ending punctuation
 const SENTENCE_END = /(?<=[。！？…])\s*/;
@@ -72,6 +73,7 @@ function extractClause(sentence: string, target: string): string {
  * @param surface   Surface form of the word (as it appears in the text)
  * @param word      Canonical word (kanji form from dictionary)
  * @param sourceUrl URL of the article
+ * @param tokenizer Kuromoji tokenizer, used to build the furigana-glossed HTML
  * @param maxCount  Maximum number of sentences to return
  */
 export function findExamples(
@@ -79,6 +81,7 @@ export function findExamples(
   surface: string,
   word: string,
   sourceUrl: string,
+  tokenizer: KuromojiTokenizer,
   maxCount = 2
 ): ExampleSentence[] {
   const sentences = splitSentences(text);
@@ -110,12 +113,77 @@ export function findExamples(
 
     results.push({
       markedHtml,
+      glossedHtml: annotateFurigana(clause, matchedTarget, tokenizer),
       plain: clause,
       sourceUrl: sourceUrl + '#:~:text=' + encodeURIComponent(matchedTarget),
     });
   }
 
   return results;
+}
+
+const KANJI_RE = /[一-龯]/;
+
+function translateUrl(text: string): string {
+  return `https://translate.google.com/?sl=ja&tl=en&text=${encodeURIComponent(text)}&op=translate`;
+}
+
+/**
+ * Render a clause as HTML: every kanji word gets a furigana <ruby> reading,
+ * and (except the target word/phrase, which is wrapped in <mark> instead)
+ * links out to a Google Translate lookup for that word in a new tab.
+ *
+ * Relies on kuromoji tokenizing the clause into surface forms that, concatenated
+ * in order, reconstruct the clause exactly — this lets us track each token's
+ * character offsets and detect which one(s) overlap the target phrase.
+ */
+function annotateFurigana(clause: string, target: string, tokenizer: KuromojiTokenizer): string {
+  const tokens = tokenizer.tokenize(clause);
+  const targetStart = clause.indexOf(target);
+  const targetEnd = targetStart >= 0 ? targetStart + target.length : -1;
+
+  let offset = 0;
+  let html = '';
+  let targetBuffer = '';
+  let inTarget = false;
+
+  const flushTarget = () => {
+    if (targetBuffer) html += `<mark>${targetBuffer}</mark>`;
+    targetBuffer = '';
+    inTarget = false;
+  };
+
+  for (const token of tokens) {
+    const surface = token.surface_form;
+    const start = offset;
+    const end = offset + surface.length;
+    offset = end;
+
+    const overlapsTarget = targetStart >= 0 && start < targetEnd && end > targetStart;
+    const hasKanji = KANJI_RE.test(surface);
+    const escaped = escapeHtml(surface);
+
+    const rendered = hasKanji
+      ? `<ruby>${escaped}<rt>${escapeHtml(toHiragana(
+          token.reading && token.reading !== '*' ? token.reading : surface
+        ))}</rt></ruby>`
+      : escaped;
+
+    if (overlapsTarget) {
+      targetBuffer += rendered;
+      inTarget = true;
+      continue;
+    }
+
+    if (inTarget) flushTarget();
+
+    html += hasKanji
+      ? `<a href="${translateUrl(surface)}" target="_blank" rel="noopener" class="gloss-link">${rendered}</a>`
+      : rendered;
+  }
+  flushTarget();
+
+  return html;
 }
 
 function escapeHtml(str: string): string {
