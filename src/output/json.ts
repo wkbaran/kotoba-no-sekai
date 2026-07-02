@@ -24,7 +24,8 @@ export function buildAnkiNote(record: WordRecord): AnkiNote {
 export function writeJsonOutput(
   records: WordRecord[],
   date: string,
-  outputDir: string
+  outputDir: string,
+  reviewRecord: WordRecord | null = null
 ): string {
   const output: RunOutput = {
     date,
@@ -33,6 +34,9 @@ export function writeJsonOutput(
     words: records,
   };
 
+  // Review word is deliberately excluded from ankiNotes/fullRecords: it's not a
+  // new word, and including it would re-import a duplicate card each time it
+  // resurfaces. It's still available for the HTML/Markdown digest below.
   const ankiNotes = records.map(buildAnkiNote);
 
   const payload = {
@@ -43,6 +47,7 @@ export function writeJsonOutput(
     },
     ankiNotes,
     fullRecords: output.words,
+    reviewWord: reviewRecord ?? undefined,
   };
 
   const filename = `words-${date}.json`;

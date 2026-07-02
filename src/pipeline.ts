@@ -77,11 +77,12 @@ function writeRunOutputs(
   records: WordRecord[],
   date: string,
   config: AppConfig,
-  mode: 'auto' | 'manual'
+  mode: 'auto' | 'manual',
+  reviewRecord: WordRecord | null = null
 ): { json: string; markdown: string; html: string } {
-  const jsonPath = writeJsonOutput(records, date, config.output.json);
-  const mdPath   = writeMarkdownOutput(records, date, config.output.markdown);
-  const htmlPath = writeHtmlOutput(records, date, config.output.html);
+  const jsonPath = writeJsonOutput(records, date, config.output.json, reviewRecord);
+  const mdPath   = writeMarkdownOutput(records, date, config.output.markdown, reviewRecord);
+  const htmlPath = writeHtmlOutput(records, date, config.output.html, reviewRecord);
   writeIndexOutput(records, date, config.output.html, mode);
   return { json: jsonPath, markdown: mdPath, html: htmlPath };
 }
@@ -282,10 +283,18 @@ export async function runPipeline(
   const htmlDir = path.resolve(process.cwd(), config.output.html);
   await enrichRecords(collectedWords, config, htmlDir, date);
 
+  // Resurface one previously-taught word for review. It already has audio and a
+  // translation from when it was first taught, so it skips enrichRecords entirely.
+  const reviewRecord = db.pickReviewWord();
+  if (reviewRecord) {
+    console.log(`[pipeline] ↺ Review: ${reviewRecord.word}【${reviewRecord.reading}】`);
+  }
+
   console.log('[pipeline] Writing outputs...');
-  const outputPaths = writeRunOutputs(collectedWords, date, config, 'auto');
+  const outputPaths = writeRunOutputs(collectedWords, date, config, 'auto', reviewRecord);
 
   for (const record of collectedWords) db.markSeen(record);
+  if (reviewRecord) db.markReviewed(reviewRecord.word, reviewRecord.reading, date);
   db.logRun(date, collectedWords.length, [...new Set(usedSources)]);
   db.close();
 

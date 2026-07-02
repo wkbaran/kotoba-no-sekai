@@ -21,7 +21,7 @@ function audioEls(srcs: Array<[string, string]>, cls: string, extra = ''): strin
     .join('');
 }
 
-function renderCard(record: WordRecord): string {
+function renderCard(record: WordRecord, isReview = false): string {
   const wordAudioEl = audioEls([
     ['normal', record.wordAudioFile      ?? ''],
     ['slow',   record.wordAudioFileSlow  ?? ''],
@@ -56,8 +56,10 @@ function renderCard(record: WordRecord): string {
       aria-label="Play pronunciation"
       title="Play word">▶</button>`;
 
+  const reviewBadge = isReview ? '<span class="badge badge-review">Review</span>' : '';
+
   return `
-  <article class="word-card card-${record.jlptLevel.toLowerCase()}">
+  <article class="word-card card-${record.jlptLevel.toLowerCase()}${isReview ? ' card-review' : ''}">
     ${wordAudioEl}
     <div class="card-header">
       <div class="word-main">
@@ -66,6 +68,7 @@ function renderCard(record: WordRecord): string {
         ${playBtn}
       </div>
       <div class="badges">
+        ${reviewBadge}
         ${jlptBadge(record.jlptLevel)}
         ${domainBadge(record.domain)}
       </div>
@@ -77,8 +80,9 @@ function renderCard(record: WordRecord): string {
   </article>`;
 }
 
-function buildPage(records: WordRecord[], date: string): string {
-  const cards = records.map(renderCard).join('\n');
+function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord | null): string {
+  const cards = records.map(r => renderCard(r)).join('\n');
+  const reviewCard = reviewRecord ? renderCard(reviewRecord, true) : '';
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -311,6 +315,9 @@ function buildPage(records: WordRecord[], date: string): string {
     .badge-n1      { background: var(--n1-bg); color: var(--n1-fg); border-color: var(--n1-border); }
     .badge-unknown { background: var(--uk-bg); color: var(--uk-fg); border-color: var(--uk-border); }
     .badge-domain  { background: var(--domain-bg); color: var(--domain-fg); border-color: var(--domain-border); }
+    .badge-review  { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+    .card-review { border-left-style: dashed; }
 
     /* ── Word info ── */
     .pos        { font-size: .8rem; color: var(--muted); margin-bottom: .3rem; font-style: italic; }
@@ -400,12 +407,13 @@ function buildPage(records: WordRecord[], date: string): string {
       <button class="speed-btn" data-speed="vslow">½×</button>
     </div>
     <h1 class="site-title">言葉の世界</h1>
-    <p class="site-subtitle">${date} · ${records.length} word${records.length !== 1 ? 's' : ''}</p>
+    <p class="site-subtitle">${date} · ${records.length} word${records.length !== 1 ? 's' : ''}${reviewRecord ? ' · 1 review' : ''}</p>
     <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">☀ Light</button>
   </header>
 
   <div class="word-grid">
     ${cards}
+    ${reviewCard}
   </div>
 
   <footer class="site-footer">
@@ -543,9 +551,10 @@ function buildPage(records: WordRecord[], date: string): string {
 export function writeHtmlOutput(
   records: WordRecord[],
   date: string,
-  outputDir: string
+  outputDir: string,
+  reviewRecord: WordRecord | null = null
 ): string {
-  const html = buildPage(records, date);
+  const html = buildPage(records, date, reviewRecord);
   const filename = `digest-${date}.html`;
   const outPath = resolveOutputPath(outputDir, filename);
   fs.writeFileSync(outPath, html, 'utf8');

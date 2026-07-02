@@ -25,6 +25,8 @@ export class WordDatabase {
         reading       TEXT NOT NULL,
         example_length INTEGER NOT NULL DEFAULT 0,
         seen_at       TEXT NOT NULL,
+        record_json      TEXT,
+        last_reviewed_at TEXT,
         PRIMARY KEY (word, reading)
       );
 
@@ -36,6 +38,19 @@ export class WordDatabase {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `);
+    this.migrateColumns();
+  }
+
+  /** Add columns introduced after the table was first created, for existing databases. */
+  private migrateColumns(): void {
+    const columns = this.db.prepare(`PRAGMA table_info(seen_words)`).all() as { name: string }[];
+    const names = new Set(columns.map(c => c.name));
+    if (!names.has('record_json')) {
+      this.db.exec(`ALTER TABLE seen_words ADD COLUMN record_json TEXT`);
+    }
+    if (!names.has('last_reviewed_at')) {
+      this.db.exec(`ALTER TABLE seen_words ADD COLUMN last_reviewed_at TEXT`);
+    }
   }
 
   hasSeen(word: string, reading: string): boolean {
@@ -57,13 +72,47 @@ export class WordDatabase {
     const exampleLength = record.examples.reduce((sum, ex) => sum + ex.plain.length, 0);
     this.db
       .prepare(`
-        INSERT INTO seen_words (word, reading, example_length, seen_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO seen_words (word, reading, example_length, seen_at, record_json)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(word, reading) DO UPDATE SET
           example_length = excluded.example_length,
-          seen_at = excluded.seen_at
+          seen_at = excluded.seen_at,
+          record_json = excluded.record_json
       `)
-      .run(record.word, record.reading, exampleLength, record.date);
+      .run(record.word, record.reading, exampleLength, record.date, JSON.stringify(record));
+  }
+
+  /**
+   * Pick a previously-taught word to resurface for review: words never
+   * reviewed before come first (oldest-taught first), then the
+   * least-recently-reviewed one, so the whole learned pool cycles over time.
+   * Only words with a stored snapshot are eligible — words learned before
+   * this feature shipped won't be until they're re-taught.
+   */
+  pickReviewWord(): WordRecord | null {
+    const row = this.db
+      .prepare(`
+        SELECT record_json FROM seen_words
+        WHERE record_json IS NOT NULL
+        ORDER BY
+          CASE WHEN last_reviewed_at IS NULL THEN 0 ELSE 1 END,
+          COALESCE(last_reviewed_at, seen_at) ASC
+        LIMIT 1
+      `)
+      .get() as { record_json: string } | undefined;
+
+    if (!row) return null;
+    try {
+      return JSON.parse(row.record_json) as WordRecord;
+    } catch {
+      return null;
+    }
+  }
+
+  markReviewed(word: string, reading: string, date: string): void {
+    this.db
+      .prepare('UPDATE seen_words SET last_reviewed_at = ? WHERE word = ? AND reading = ?')
+      .run(date, word, reading);
   }
 
   logRun(date: string, wordCount: number, sources: string[]): void {
