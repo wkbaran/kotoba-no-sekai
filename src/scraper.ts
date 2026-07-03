@@ -3,11 +3,25 @@ import * as cheerio from 'cheerio';
 // Block-level elements whose text should be kept as separate segments
 const BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, dt, dd';
 
+// Narrower selector used for the archived "whole article" backup copy.
+// Headings and list items are excluded: they're rarely part of the actual
+// article body (titles, related-link lists, nav) and including them would
+// make the archive read as disjointed fragments rather than an article.
+const ARCHIVAL_BLOCK_SELECTOR = 'p, div, blockquote, dt, dd';
+
+// Safety cap on how much archived text we keep per article.
+const MAX_ARCHIVAL_LENGTH = 5000;
+
+export interface ScrapedArticle {
+  text: string;
+  archivalText: string;
+}
+
 /**
  * Fetch an article URL and extract readable body text.
  * Tries common content selectors before falling back to <body>.
  */
-export async function scrapeArticleText(url: string): Promise<string> {
+export async function scrapeArticleText(url: string): Promise<ScrapedArticle> {
   try {
     const res = await fetch(url, {
       headers: {
@@ -19,18 +33,18 @@ export async function scrapeArticleText(url: string): Promise<string> {
 
     if (!res.ok) {
       console.warn(`[scraper] HTTP ${res.status} for ${url}`);
-      return '';
+      return { text: '', archivalText: '' };
     }
 
     const html = await res.text();
     return extractText(html);
   } catch (err) {
     console.warn(`[scraper] Failed to fetch ${url}: ${(err as Error).message}`);
-    return '';
+    return { text: '', archivalText: '' };
   }
 }
 
-function extractText(html: string): string {
+function extractText(html: string): ScrapedArticle {
   const $ = cheerio.load(html);
 
   // Remove noise elements
@@ -52,12 +66,30 @@ function extractText(html: string): string {
   for (const selector of contentSelectors) {
     const el = $(selector).first();
     if (el.length && el.text().trim().length > 100) {
-      return extractBlockTexts($, el);
+      return {
+        text: extractBlockTexts($, el, BLOCK_SELECTOR),
+        archivalText: extractBlockTexts($, el, ARCHIVAL_BLOCK_SELECTOR).slice(0, MAX_ARCHIVAL_LENGTH),
+      };
     }
   }
 
   // Last resort: full body
-  return extractBlockTexts($, $('body'));
+  return {
+    text: extractBlockTexts($, $('body'), BLOCK_SELECTOR),
+    archivalText: extractBlockTexts($, $('body'), ARCHIVAL_BLOCK_SELECTOR).slice(0, MAX_ARCHIVAL_LENGTH),
+  };
+}
+
+/**
+ * Extract archival "whole article" text from feed-inline HTML (already just
+ * the article body, no surrounding page chrome to search through). Uses the
+ * same narrower selector as extractText's archivalText, and also strips
+ * furigana <rt> readings so they don't leak into the archived text.
+ */
+export function extractArchivalText(html: string): string {
+  const $ = cheerio.load(html);
+  $('script, style, rt').remove();
+  return extractBlockTexts($, $.root(), ARCHIVAL_BLOCK_SELECTOR).slice(0, MAX_ARCHIVAL_LENGTH);
 }
 
 /**
@@ -67,14 +99,14 @@ function extractText(html: string): string {
  * part of their containing block.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractBlockTexts($: ReturnType<typeof cheerio.load>, container: any): string {
+function extractBlockTexts($: ReturnType<typeof cheerio.load>, container: any, selector: string): string {
   const segments: string[] = [];
 
-  container.find(BLOCK_SELECTOR).each((_: number, el: cheerio.BasicAcceptedElems<any>) => {
+  container.find(selector).each((_: number, el: cheerio.BasicAcceptedElems<any>) => {
     const $el = $(el);
     // Skip elements nested inside another block we'll collect, to avoid duplicates
     // (e.g. <p> inside <blockquote> — collect only the outer block)
-    if ($el.parents(BLOCK_SELECTOR).length > 0) return;
+    if ($el.parents(selector).length > 0) return;
     const text = cleanText($el.text());
     if (text.length >= 10) segments.push(text);
   });

@@ -103,6 +103,8 @@ export interface ArticleContent {
   title: string;
   domain: string;
   text: string; // plain text, sentences separated by spaces
+  /** Prose-only extract (headings/list items excluded) kept as a backup in case sourceUrl goes offline. */
+  archivalText: string;
 }
 
 /**
@@ -141,6 +143,8 @@ export interface ExampleSentence {
   /** Plain text version (no HTML tags) */
   plain: string;
   sourceUrl: string;
+  /** Backup copy of the source article's prose, in case sourceUrl goes offline. May be empty. */
+  articleText: string;
   /** Relative paths from output/web/ to generated audio files, if any */
   audioFile?: string;
   audioFileSlow?: string;

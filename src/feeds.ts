@@ -1,7 +1,7 @@
 import type { FeedSource, ArticleContent, ArticleStub } from './types.js';
 import { fetchRssFeedArticles, listRssFeedItems, stripHtml } from './rss.js';
 import { fetchJsonFeedArticles, listJsonFeedItems } from './json-feed.js';
-import { scrapeArticleText } from './scraper.js';
+import { scrapeArticleText, extractArchivalText, type ScrapedArticle } from './scraper.js';
 
 export { shuffle, stripHtml } from './rss.js';
 
@@ -38,9 +38,12 @@ export async function listFeedItems(source: FeedSource): Promise<ArticleStub[]> 
  * enough, otherwise scrape the article page. Mirrors fetchRssFeedArticles's
  * inline-vs-scrape threshold, just deferred until the stub is actually needed.
  */
-export async function resolveArticleText(stub: ArticleStub): Promise<string> {
+export async function resolveArticleText(stub: ArticleStub): Promise<ScrapedArticle> {
   if (stub.inlineText && stub.inlineText.length > 200) {
-    return stripHtml(stub.inlineText);
+    return {
+      text: stripHtml(stub.inlineText),
+      archivalText: extractArchivalText(stub.inlineText),
+    };
   }
   return scrapeArticleText(stub.url);
 }

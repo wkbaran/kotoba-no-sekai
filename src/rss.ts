@@ -1,6 +1,6 @@
 import RSSParser from 'rss-parser';
 import type { FeedSource, ArticleContent, ArticleStub } from './types.js';
-import { scrapeArticleText } from './scraper.js';
+import { scrapeArticleText, extractArchivalText } from './scraper.js';
 
 type FeedItem = {
   title?: string;
@@ -52,12 +52,14 @@ export async function fetchRssFeedArticles(source: FeedSource): Promise<ArticleC
     // Prefer full article HTML embedded in the feed
     const inlineHtml = item.contentEncoded ?? item.content ?? '';
     let text = '';
+    let archivalText = '';
 
     if (inlineHtml.length > 200) {
       text = stripHtml(inlineHtml);
+      archivalText = extractArchivalText(inlineHtml);
     } else {
       // Fetch the actual article page
-      text = await scrapeArticleText(url);
+      ({ text, archivalText } = await scrapeArticleText(url));
     }
 
     if (text.trim().length < 50) continue;
@@ -67,6 +69,7 @@ export async function fetchRssFeedArticles(source: FeedSource): Promise<ArticleC
       title: item.title ?? '',
       domain: source.domain,
       text,
+      archivalText,
     });
   }
 

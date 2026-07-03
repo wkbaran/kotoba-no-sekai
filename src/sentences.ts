@@ -69,12 +69,13 @@ function extractClause(sentence: string, target: string): string {
  * Find sentences in the article text that contain the target word,
  * wrap the word in <mark> tags, and return ExampleSentence objects.
  *
- * @param text      Full article text (plain)
- * @param surface   Surface form of the word (as it appears in the text)
- * @param word      Canonical word (kanji form from dictionary)
- * @param sourceUrl URL of the article
- * @param tokenizer Kuromoji tokenizer, used to build the furigana-glossed HTML
- * @param maxCount  Maximum number of sentences to return
+ * @param text        Full article text (plain)
+ * @param surface     Surface form of the word (as it appears in the text)
+ * @param word        Canonical word (kanji form from dictionary)
+ * @param sourceUrl   URL of the article
+ * @param tokenizer   Kuromoji tokenizer, used to build the furigana-glossed HTML
+ * @param articleText Archived backup copy of the article's prose (may be empty)
+ * @param maxCount    Maximum number of sentences to return
  */
 export function findExamples(
   text: string,
@@ -82,6 +83,7 @@ export function findExamples(
   word: string,
   sourceUrl: string,
   tokenizer: KuromojiTokenizer,
+  articleText: string,
   maxCount = 2
 ): ExampleSentence[] {
   const sentences = splitSentences(text);
@@ -116,6 +118,7 @@ export function findExamples(
       glossedHtml: annotateFurigana(clause, matchedTarget, tokenizer),
       plain: clause,
       sourceUrl: sourceUrl + '#:~:text=' + encodeURIComponent(matchedTarget),
+      articleText,
     });
   }
 

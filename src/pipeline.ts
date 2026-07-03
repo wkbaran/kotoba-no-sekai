@@ -164,6 +164,7 @@ async function processArticle(
       dictResult.word,
       article.url,
       tokenizer,
+      article.archivalText,
       config.max_examples_per_word
     );
     if (examples.length === 0) continue;
@@ -214,10 +215,10 @@ export async function runPipeline(
       if (!stub) return;
       cursor++;
 
-      const text = await resolveArticleText(stub);
+      const { text, archivalText } = await resolveArticleText(stub);
       if (text.trim().length < 50) continue;
 
-      const article: ArticleContent = { url: stub.url, title: stub.title, domain: stub.domain, text };
+      const article: ArticleContent = { url: stub.url, title: stub.title, domain: stub.domain, text, archivalText };
       const [record] = await processArticle(article, config, db, tokenizer, 1, jishoLookup, attemptedBaseForms);
       // Re-check the cap here (not just at the top of the loop): other workers may
       // have finished concurrently while this one was scraping/looking up, and
@@ -262,6 +263,7 @@ export async function runPipeline(
         record.word,
         article.url,
         tokenizer,
+        article.archivalText,
         config.max_examples_per_word - record.examples.length
       );
       for (const ex of additional) {
@@ -336,6 +338,7 @@ export async function runWordPipeline(
       dictResult.word,
       article.url,
       tokenizer,
+      article.archivalText,
       config.max_examples_per_word
     );
     if (examples.length === 0) continue;
@@ -444,7 +447,7 @@ export async function runUrlPipeline(
 
   console.log(`[pipeline] Fetching article: ${url}`);
 
-  const text = await scrapeArticleText(url);
+  const { text, archivalText } = await scrapeArticleText(url);
   if (!text || text.trim().length < 50) {
     db.close();
     throw new Error(`Could not extract usable text from ${url}`);
@@ -453,7 +456,7 @@ export async function runUrlPipeline(
   let domain = url;
   try { domain = new URL(url).hostname; } catch { /* keep full url as fallback */ }
 
-  const article: ArticleContent = { url, title: '', domain, text };
+  const article: ArticleContent = { url, title: '', domain, text, archivalText };
   const words = await processArticle(article, config, db, tokenizer, 1);
 
   if (words.length === 0) {

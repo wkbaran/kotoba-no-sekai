@@ -42,7 +42,10 @@ function renderCard(record: WordRecord, isReview = false): string {
       ? `<p class="example-translation">${ex.translationMarkedHtml}</p>`
       : '';
     const exPlayBtn = `<button class="play-btn play-ex" data-text="${escapeAttr(ex.plain)}" data-index="${i}" aria-label="Play example" title="Play example">▶</button>`;
-    return `<blockquote class="example" data-index="${i}"><div class="example-top">${exPlayBtn}<span>${linked}</span></div>${audioEl}${translationEl}</blockquote>`;
+    const backupBtn = ex.articleText
+      ? `<button class="backup-btn" data-article-text="${escapeAttr(ex.articleText)}" data-source-url="${escapeAttr(ex.sourceUrl)}" aria-label="View saved article text" title="If the source link above is dead, view a saved copy of the article text">🗄</button>`
+      : '';
+    return `<blockquote class="example" data-index="${i}"><div class="example-top">${exPlayBtn}<span>${linked}</span>${backupBtn}</div>${audioEl}${translationEl}</blockquote>`;
   }).join('\n');
 
   const altDefs = record.altDefinitions.length > 0
@@ -360,6 +363,26 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
       align-self: center;
     }
 
+    .backup-btn {
+      background: none;
+      border: 1px solid var(--example-border);
+      color: var(--muted);
+      border-radius: 50%;
+      width: 1.5rem;
+      height: 1.5rem;
+      font-size: .7rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      align-self: center;
+      margin-left: auto;
+      transition: color .15s, border-color .15s;
+    }
+
+    .backup-btn:hover { color: var(--accent); border-color: var(--accent); }
+
     .example mark {
       background: var(--mark-bg);
       color: inherit;
@@ -539,6 +562,33 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
           } else {
             speak(text, done);
           }
+        });
+      });
+
+      /* Backup text buttons — open a saved copy in a new tab, for when the
+         source link above is dead. Built client-side so no extra files are
+         needed; works offline too since nothing is fetched. */
+      function escapeHtmlForBackup(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      document.querySelectorAll('.backup-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var win = window.open('', '_blank');
+          if (!win) return;
+          var text = escapeHtmlForBackup(btn.dataset.articleText || '');
+          var src  = escapeHtmlForBackup(btn.dataset.sourceUrl || '');
+          win.document.write(
+            '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
+            '<title>Saved article text</title><style>' +
+            'body{font-family:"Hiragino Sans","Yu Gothic",sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem;line-height:1.9;white-space:pre-wrap;color:#212529;}' +
+            '.note{color:#6c757d;font-size:.85rem;border-bottom:1px solid #dee2e6;padding-bottom:1rem;margin-bottom:1rem;white-space:normal;}' +
+            'a{color:#5c6bc0;}' +
+            '</style></head><body>' +
+            '<p class="note">Saved copy — the original article may no longer be available.<br>Original: <a href="' + src + '" target="_blank" rel="noopener">' + src + '</a></p>' +
+            text +
+            '</body></html>'
+          );
+          win.document.close();
         });
       });
 

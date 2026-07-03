@@ -1,5 +1,5 @@
 import type { FeedSource, ArticleContent, ArticleStub } from './types.js';
-import { scrapeArticleText } from './scraper.js';
+import { scrapeArticleText, extractArchivalText } from './scraper.js';
 import { stripHtml, parseDate } from './rss.js';
 
 /** Resolve a dot-notation path (e.g. "data.items") against a JSON value. */
@@ -76,10 +76,17 @@ export async function fetchJsonFeedArticles(source: FeedSource): Promise<Article
     const title = mapping.titleField ? readStringField(record, mapping.titleField) : '';
     const inline = mapping.contentField ? readStringField(record, mapping.contentField) : '';
 
-    const text = inline.length > 200 ? stripHtml(inline) : await scrapeArticleText(url);
+    let text: string;
+    let archivalText: string;
+    if (inline.length > 200) {
+      text = stripHtml(inline);
+      archivalText = extractArchivalText(inline);
+    } else {
+      ({ text, archivalText } = await scrapeArticleText(url));
+    }
     if (text.trim().length < 50) continue;
 
-    articles.push({ url, title, domain: source.domain, text });
+    articles.push({ url, title, domain: source.domain, text, archivalText });
   }
 
   console.log(`[json-feed] ${source.name}: ${articles.length} articles`);
