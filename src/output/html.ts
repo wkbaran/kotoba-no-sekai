@@ -401,6 +401,11 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
       font-size: .6em;
       color: var(--muted);
       user-select: none;
+      visibility: hidden;
+    }
+
+    .example ruby:hover rt {
+      visibility: visible;
     }
 
     .gloss-link {
