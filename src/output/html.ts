@@ -29,7 +29,10 @@ function renderCard(record: WordRecord, isReview = false): string {
   ], 'audio-word');
 
   const examples = record.examples.map((ex, i) => {
-    const linked = ex.glossedHtml.replace(
+    // Review words backfilled from before glossedHtml/articleText existed won't
+    // have them in their stored snapshot — fall back to the always-present
+    // markedHtml rather than crashing on undefined.
+    const linked = (ex.glossedHtml ?? ex.markedHtml).replace(
       /<mark>(.*?)<\/mark>/g,
       `<a href="${ex.sourceUrl}" target="_blank" rel="noopener" class="source-link"><mark>$1</mark></a>`
     );

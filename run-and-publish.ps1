@@ -11,14 +11,14 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out
 function Write-Log {
     param([string]$Message)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    "$timestamp  $Message" | Tee-Object -FilePath $LogFile -Append
+    "$timestamp  $Message" | Tee-Object -FilePath $LogFile -Append -Encoding utf8
 }
 
 Set-Location $ProjectDir
 
 Write-Log "=== Building ==="
 
-& npm run build 2>&1 | Tee-Object -FilePath $LogFile -Append
+& npm run build 2>&1 | Tee-Object -FilePath $LogFile -Append -Encoding utf8
 if ($LASTEXITCODE -ne 0) {
     Write-Log "Build failed with exit code $LASTEXITCODE. Aborting."
     exit $LASTEXITCODE
@@ -26,7 +26,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Log "=== Starting pipeline ==="
 
-& $NodeExe --env-file-if-exists=.env dist/index.js 2>&1 | Tee-Object -FilePath $LogFile -Append
+& $NodeExe --env-file-if-exists=.env dist/index.js 2>&1 | Tee-Object -FilePath $LogFile -Append -Encoding utf8
 if ($LASTEXITCODE -ne 0) {
     Write-Log "Pipeline failed with exit code $LASTEXITCODE. Aborting publish."
     exit $LASTEXITCODE
@@ -34,7 +34,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Log "Pipeline complete. Starting publish..."
 
-& $NodeExe --env-file-if-exists=.env dist/index.js --publish 2>&1 | Tee-Object -FilePath $LogFile -Append
+& $NodeExe --env-file-if-exists=.env dist/index.js --publish 2>&1 | Tee-Object -FilePath $LogFile -Append -Encoding utf8
 if ($LASTEXITCODE -ne 0) {
     Write-Log "Publish failed with exit code $LASTEXITCODE."
     exit $LASTEXITCODE
