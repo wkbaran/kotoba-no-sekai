@@ -65,7 +65,7 @@ function renderCard(record: WordRecord, isReview = false): string {
   const reviewBadge = isReview ? '<span class="badge badge-review">Review</span>' : '';
 
   return `
-  <article class="word-card card-${record.jlptLevel.toLowerCase()}${isReview ? ' card-review' : ''}">
+  <article class="word-card card-${record.jlptLevel.toLowerCase()}">
     ${wordAudioEl}
     <div class="card-header">
       <div class="word-main">
@@ -322,8 +322,6 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
     .badge-unknown { background: var(--uk-bg); color: var(--uk-fg); border-color: var(--uk-border); }
     .badge-domain  { background: var(--domain-bg); color: var(--domain-fg); border-color: var(--domain-border); }
     .badge-review  { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-
-    .card-review { border-left-style: dashed; }
 
     /* ── Word info ── */
     .pos        { font-size: .8rem; color: var(--muted); margin-bottom: .3rem; font-style: italic; }
