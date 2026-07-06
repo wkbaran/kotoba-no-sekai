@@ -401,14 +401,41 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
     .source-link { color: inherit; text-decoration: none; }
     .source-link:hover mark { background: var(--mark-hover); text-decoration: underline; }
 
+    /* Native <rt> is kept in the DOM for semantics/accessibility, but hidden —
+       it's replaced visually by a proper popup tooltip below (real furigana
+       renders too small to read comfortably as a hover reveal). */
     .example rt {
-      font-size: .6em;
-      color: var(--muted);
-      user-select: none;
-      visibility: hidden;
+      display: none;
     }
 
-    .example ruby:hover rt {
+    .example ruby {
+      position: relative;
+    }
+
+    .example ruby::after {
+      content: attr(data-reading);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%) translateY(-6px);
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .3em .65em;
+      font-size: .8rem;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .12s ease;
+      z-index: 20;
+    }
+
+    .example ruby:hover::after {
+      opacity: 1;
       visibility: visible;
     }
 

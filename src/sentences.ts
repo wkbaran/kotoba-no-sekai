@@ -166,10 +166,14 @@ function annotateFurigana(clause: string, target: string, tokenizer: KuromojiTok
     const hasKanji = KANJI_RE.test(surface);
     const escaped = escapeHtml(surface);
 
+    // data-reading duplicates the <rt> content so CSS can render it as a
+    // proper popup tooltip (native <rt> renders as tiny inline text, too
+    // small to read comfortably as a hover reveal).
+    const reading = escapeHtml(toHiragana(
+      token.reading && token.reading !== '*' ? token.reading : surface
+    ));
     const rendered = hasKanji
-      ? `<ruby>${escaped}<rt>${escapeHtml(toHiragana(
-          token.reading && token.reading !== '*' ? token.reading : surface
-        ))}</rt></ruby>`
+      ? `<ruby data-reading="${reading}">${escaped}<rt>${reading}</rt></ruby>`
       : escaped;
 
     if (overlapsTarget) {
