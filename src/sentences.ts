@@ -140,7 +140,7 @@ function translateUrl(text: string): string {
  * in order, reconstruct the clause exactly — this lets us track each token's
  * character offsets and detect which one(s) overlap the target phrase.
  */
-function annotateFurigana(clause: string, target: string, tokenizer: KuromojiTokenizer): string {
+export function annotateFurigana(clause: string, target: string, tokenizer: KuromojiTokenizer): string {
   const tokens = tokenizer.tokenize(clause);
   const targetStart = clause.indexOf(target);
   const targetEnd = targetStart >= 0 ? targetStart + target.length : -1;
