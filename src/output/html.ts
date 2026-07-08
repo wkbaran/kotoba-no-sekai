@@ -127,7 +127,6 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
       /* card accent borders */
       --card-n5: #40a02b; --card-n4: #179299; --card-n3: #df8e1d;
       --card-n2: #fe640b; --card-n1: #d20f39; --card-uk: #45475a;
-      --card-review: #179299;
 
       /* domain badge */
       --domain-bg: #1e2a45; --domain-fg: #89b4fa; --domain-border: #3b5998;
@@ -156,7 +155,6 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
 
       --card-n5: #4caf50; --card-n4: #8bc34a; --card-n3: #ffc107;
       --card-n2: #ff9800; --card-n1: #ef5350; --card-uk: #9e9e9e;
-      --card-review: #00897b;
 
       --domain-bg: #e8eaf6; --domain-fg: #3949ab; --domain-border: #7986cb;
     }
@@ -259,8 +257,10 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
     .card-unknown { border-left-color: var(--card-uk); }
 
     /* Fixed identity color for review cards, independent of JLPT level so it
-       doesn't change day to day depending on which word is being reviewed. */
-    .card-review { border-left-color: var(--card-review); }
+       doesn't change day to day depending on which word is being reviewed, and
+       doesn't collide with a level color when that level happens to appear
+       elsewhere on the same page. Reuses --accent, same as the REVIEW badge. */
+    .card-review { border-left-color: var(--accent); }
 
     .card-header {
       display: flex;
