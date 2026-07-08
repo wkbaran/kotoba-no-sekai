@@ -65,7 +65,7 @@ function renderCard(record: WordRecord, isReview = false): string {
   const reviewBadge = isReview ? '<span class="badge badge-review">Review</span>' : '';
 
   return `
-  <article class="word-card card-${record.jlptLevel.toLowerCase()}${isReview ? ' card-review' : ''}">
+  <article class="word-card${isReview ? ' card-review' : ''}">
     ${wordAudioEl}
     <div class="card-header">
       <div class="word-main">
@@ -124,9 +124,9 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
       --n1-bg: #3a0f0f; --n1-fg: #f38ba8; --n1-border: #d20f39;
       --uk-bg: #232634; --uk-fg: #a6adc8; --uk-border: #45475a;
 
-      /* card accent borders */
-      --card-n5: #40a02b; --card-n4: #179299; --card-n3: #df8e1d;
-      --card-n2: #fe640b; --card-n1: #d20f39; --card-uk: #45475a;
+      /* card left-border: teal for everything, green only for review */
+      --card-default: #179299;
+      --card-review: #40a02b;
 
       /* domain badge */
       --domain-bg: #1e2a45; --domain-fg: #89b4fa; --domain-border: #3b5998;
@@ -153,8 +153,8 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
       --n1-bg: #fce4ec; --n1-fg: #c62828; --n1-border: #ef5350;
       --uk-bg: #f5f5f5; --uk-fg: #616161; --uk-border: #9e9e9e;
 
-      --card-n5: #4caf50; --card-n4: #8bc34a; --card-n3: #ffc107;
-      --card-n2: #ff9800; --card-n1: #ef5350; --card-uk: #9e9e9e;
+      --card-default: #00897b;
+      --card-review: #4caf50;
 
       --domain-bg: #e8eaf6; --domain-fg: #3949ab; --domain-border: #7986cb;
     }
@@ -241,7 +241,7 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
     .word-card {
       background: var(--surface);
       border-radius: var(--radius);
-      border-left: 4px solid var(--card-uk);
+      border-left: 4px solid var(--card-default);
       padding: 1.25rem 1.5rem;
       box-shadow: var(--shadow);
       transition: box-shadow .2s, background .25s;
@@ -249,18 +249,9 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
 
     .word-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.3); }
 
-    .card-n5 { border-left-color: var(--card-n5); }
-    .card-n4 { border-left-color: var(--card-n4); }
-    .card-n3 { border-left-color: var(--card-n3); }
-    .card-n2 { border-left-color: var(--card-n2); }
-    .card-n1 { border-left-color: var(--card-n1); }
-    .card-unknown { border-left-color: var(--card-uk); }
-
-    /* Fixed identity color for review cards, independent of JLPT level so it
-       doesn't change day to day depending on which word is being reviewed, and
-       doesn't collide with a level color when that level happens to appear
-       elsewhere on the same page. Reuses --accent, same as the REVIEW badge. */
-    .card-review { border-left-color: var(--accent); }
+    /* Only two left-border colors on this page: teal (default) and green
+       (review), regardless of JLPT level — level is already shown via badge. */
+    .card-review { border-left-color: var(--card-review); }
 
     .card-header {
       display: flex;
