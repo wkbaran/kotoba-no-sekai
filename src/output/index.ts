@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { WordRecord } from '../types.js';
 import { resolveOutputPath } from '../config.js';
+import { ATTRIBUTION_HTML, ATTRIBUTION_CSS } from './attribution.js';
 
 // ── Types ─────────────────────────────────────────────────
 
@@ -235,6 +236,7 @@ function buildIndexPage(entries: ManifestEntry[], mode: RunMode): string {
     .empty code { background: var(--surface); padding: .1em .4em; border-radius: 4px; font-size: .9em; }
 
     .site-footer { text-align: center; margin-top: 3rem; color: var(--muted); font-size: .8rem; }
+    ${ATTRIBUTION_CSS}
 
     @media (max-width: 480px) { .word-chip { font-size: .8rem; } }
   </style>
@@ -258,6 +260,7 @@ function buildIndexPage(entries: ManifestEntry[], mode: RunMode): string {
 
   <footer class="site-footer">
     <p>言葉の世界 — World of Words</p>
+    ${ATTRIBUTION_HTML}
   </footer>
 
   <script>
@@ -450,6 +453,7 @@ function buildWordsPage(rows: WordRow[]): string {
 
     .empty { text-align: center; color: var(--muted); padding: 3rem 0; }
     .site-footer { text-align: center; margin-top: 3rem; color: var(--muted); font-size: .8rem; }
+    ${ATTRIBUTION_CSS}
 
     @media (max-width: 480px) {
       td { padding: .45rem .65rem; }
@@ -487,6 +491,7 @@ function buildWordsPage(rows: WordRow[]): string {
 
   <footer class="site-footer">
     <p>言葉の世界 — World of Words</p>
+    ${ATTRIBUTION_HTML}
   </footer>
 
   <script>
