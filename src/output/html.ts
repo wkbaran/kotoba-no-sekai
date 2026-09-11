@@ -426,7 +426,8 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
       z-index: 20;
     }
 
-    .example ruby:hover::after {
+    .example ruby:hover::after,
+    .example a.tap-active ruby::after {
       opacity: 1;
       visibility: visible;
     }
@@ -623,6 +624,31 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
             '</body></html>'
           );
           win.document.close();
+        });
+      });
+
+      /* Furigana tap-to-reveal on touch devices: the first tap on a
+         gloss/source link with furigana just reveals the tooltip (via
+         .tap-active) instead of navigating; a second tap on the same word
+         follows the link. Mobile browsers apply a sticky :hover on tap, so
+         :hover can't tell touch from mouse; use the pointerType of the
+         pointerdown that started the click instead. Mouse clicks, keyboard
+         activation (click.detail is 0), and links with no furigana (e.g.
+         kana-only targets) all navigate on the first click. */
+      var lastPointerType = '';
+      document.addEventListener('pointerdown', function (e) { lastPointerType = e.pointerType; }, true);
+      document.querySelectorAll('.example a.gloss-link, .example a.source-link').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+          if (e.detail === 0 || lastPointerType !== 'touch' || !link.querySelector('ruby')) return;
+          if (link.classList.contains('tap-active')) return;
+          e.preventDefault();
+          document.querySelectorAll('.tap-active').forEach(function (el) { el.classList.remove('tap-active'); });
+          link.classList.add('tap-active');
+        });
+      });
+      document.addEventListener('click', function (e) {
+        document.querySelectorAll('.tap-active').forEach(function (el) {
+          if (!el.contains(e.target)) el.classList.remove('tap-active');
         });
       });
 
