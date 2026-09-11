@@ -412,7 +412,7 @@ function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord
       transform: translateX(-50%) translateY(-6px);
       background: var(--surface);
       color: var(--text);
-      border: 1px solid var(--border);
+      border: 1px solid var(--example-border);
       border-radius: 6px;
       padding: .3em .65em;
       font-size: .8rem;
