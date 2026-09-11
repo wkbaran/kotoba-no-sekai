@@ -170,9 +170,10 @@ async function main(): Promise<void> {
       result = await runPipeline(config, feeds, slug);
     }
 
+    // Exit non-zero so a scheduled run that produced nothing shows up as failed
     if (result.wordsCollected === 0) {
       console.log('\n  No new words this run. Try a different level or add more feeds.\n');
-      process.exit(0);
+      process.exit(1);
     }
 
     console.log('');

@@ -69,29 +69,106 @@ export function levelMatches(jlptLevel: JlptLevel, configLevel: Level): boolean 
 
 const JISHO_BASE = 'https://jisho.org/api/v1/search/words';
 
+// Jisho rejects Node's default fetch User-Agent with 403 "Request forbidden by
+// administrative rules", so identify the pipeline explicitly.
+const JISHO_USER_AGENT = 'KotobaNoSekai/1.0 (+https://github.com/wkbaran/kotoba-no-sekai)';
+
+// Jisho rate-limits at more than 10 requests per 10 seconds (HTTP 429). Space
+// request starts at least this far apart, however low jisho_delay_ms is set.
+const JISHO_MIN_INTERVAL_MS = 1250;
+
+// A 429 is retried after Retry-After (or this backoff, doubled per attempt,
+// capped at the max wait); every other caller is held back for the same wait.
+const JISHO_RATE_LIMIT_RETRIES = 3;
+const JISHO_RATE_LIMIT_BACKOFF_MS = 10_000;
+const JISHO_MAX_RETRY_WAIT_MS = 60_000;
+
+// Abort the run rather than keep querying a Jisho that is down or blocking us.
+const JISHO_MAX_CONSECUTIVE_FAILURES = 5;
+const JISHO_MAX_TOTAL_FAILURES = 20;
+
+export class JishoUnavailableError extends Error {}
+
+let nextRequestAt = 0;
+let consecutiveFailures = 0;
+let totalFailures = 0;
+let unavailable: JishoUnavailableError | null = null;
+
+/** Wait for the next request slot, reserving it first so concurrent callers never share one. */
+async function throttle(delayMs: number): Promise<void> {
+  const now = Date.now();
+  const startAt = Math.max(now, nextRequestAt);
+  nextRequestAt = startAt + Math.max(delayMs, JISHO_MIN_INTERVAL_MS);
+  await sleep(startAt - now);
+}
+
+/** Log a failed lookup; throws JishoUnavailableError once the failure limits are reached. */
+function recordFailure(reason: string): void {
+  consecutiveFailures++;
+  totalFailures++;
+  console.warn(`[dict] ${reason}`);
+  if (consecutiveFailures >= JISHO_MAX_CONSECUTIVE_FAILURES || totalFailures >= JISHO_MAX_TOTAL_FAILURES) {
+    unavailable = new JishoUnavailableError(
+      `Jisho lookups are failing (${consecutiveFailures} in a row, ${totalFailures} this run; last: ${reason}). Aborting run.`
+    );
+    throw unavailable;
+  }
+}
+
+function retryWaitMs(res: Response, attempt: number): number {
+  const retryAfterSec = Number(res.headers.get('retry-after'));
+  const waitMs = retryAfterSec > 0 ? retryAfterSec * 1000 : JISHO_RATE_LIMIT_BACKOFF_MS * 2 ** attempt;
+  return Math.min(waitMs, JISHO_MAX_RETRY_WAIT_MS);
+}
+
+/**
+ * Look up a word on Jisho. Returns null when there is no usable entry or the
+ * request failed; throws JishoUnavailableError once too many requests have
+ * failed this run, and on every call after that.
+ */
 export async function lookupWord(
   word: string,
   delayMs: number
 ): Promise<DictionaryResult | null> {
-  await sleep(delayMs);
+  if (unavailable) throw unavailable;
 
   let data: JishoResponse;
-  try {
-    const res = await fetch(`${JISHO_BASE}?keyword=${encodeURIComponent(word)}`, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(8000),
-    });
+  for (let attempt = 0; ; attempt++) {
+    await throttle(delayMs);
 
-    if (!res.ok) {
-      console.warn(`[dict] Jisho HTTP ${res.status} for "${word}"`);
+    let res: Response;
+    try {
+      res = await fetch(`${JISHO_BASE}?keyword=${encodeURIComponent(word)}`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': JISHO_USER_AGENT },
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch (err) {
+      recordFailure(`Jisho lookup failed for "${word}": ${(err as Error).message}`);
       return null;
     }
 
-    data = await res.json() as JishoResponse;
-  } catch (err) {
-    console.warn(`[dict] Jisho lookup failed for "${word}": ${(err as Error).message}`);
-    return null;
+    if (res.status === 429 && attempt < JISHO_RATE_LIMIT_RETRIES) {
+      const waitMs = retryWaitMs(res, attempt);
+      console.warn(`[dict] Jisho rate limit hit (429) for "${word}"; backing off ${Math.round(waitMs / 1000)}s`);
+      nextRequestAt = Math.max(nextRequestAt, Date.now() + waitMs);
+      continue;
+    }
+
+    if (!res.ok) {
+      recordFailure(`Jisho HTTP ${res.status} for "${word}"`);
+      return null;
+    }
+
+    try {
+      data = await res.json() as JishoResponse;
+    } catch (err) {
+      recordFailure(`Jisho returned unreadable JSON for "${word}": ${(err as Error).message}`);
+      return null;
+    }
+    break;
   }
+
+  consecutiveFailures = 0;
 
   if (!data.data || data.data.length === 0) return null;
 
@@ -131,8 +208,8 @@ function sleep(ms: number): Promise<void> {
 /**
  * Returns a lookup function that serializes calls to lookupWord, one at a time,
  * regardless of how many callers invoke it concurrently. Lets article scraping
- * run concurrently while keeping Jisho traffic exactly as polite (one in-flight
- * request, `delayMs` apart) as the original single-threaded pipeline.
+ * run concurrently while keeping Jisho traffic to one in-flight request, spaced
+ * by lookupWord's throttle, as in the original single-threaded pipeline.
  */
 export function createSerialLookup(
   delayMs: number
