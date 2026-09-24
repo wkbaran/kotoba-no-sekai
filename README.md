@@ -49,9 +49,12 @@ Once a day the pipeline:
 - **Where it came up.** The real sentences from the article, with the word highlighted, furigana on tap or always on, the English behind a disclosure, and a link to the article (plus a saved copy in case the link dies).
 - **Audio** at normal, slow and slower speeds. It falls back to the browser's own speech when there's no recording.
 - **Days and All words.** Every past day is on a calendar. All words can be searched in kanji, kana or English, filtered by JLPT level, and switched into a self-test with the English hidden.
-- A palette picker built on combinations from Wada Sanzo's *A Dictionary of Color Combinations*, with light and dark modes.
 
 It also writes an Anki-ready JSON file and a Markdown digest each day.
+
+### Colors from Wada Sanzo
+
+The site's colors come from [*A Dictionary of Color Combinations*](https://en.wikipedia.org/wiki/Sanzo_Wada), Wada Sanzo's 1930s study of color pairings, still in print. The swatch button in the header opens a palette picker with six of his three-color combinations (the default is No. 166: deep slate green, Naples yellow and grenadine pink). Each combination supplies the background, the text and one accent, and every other shade on the page is mixed from those three. Light and dark modes swap the background and text, and you can mix your own.
 
 ### What it uses
 
