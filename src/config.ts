@@ -33,7 +33,7 @@ const DEFAULTS: AppConfig = {
     provider: 'auto',
     ollama: {
       url: 'http://localhost:11434',
-      model: 'qwen2.5:3b',
+      model: 'translategemma:27b',
     },
     google: {},
   },
