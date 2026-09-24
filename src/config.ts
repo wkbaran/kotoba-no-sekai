@@ -48,7 +48,9 @@ export function loadConfig(configPath = 'config.yaml'): AppConfig {
 
   if (!fs.existsSync(fullPath)) {
     console.warn(`[config] ${fullPath} not found — using defaults`);
-    return DEFAULTS;
+    const config = structuredClone(DEFAULTS);
+    applyEnvOverrides(config);
+    return config;
   }
 
   const raw = yaml.load(fs.readFileSync(fullPath, 'utf8')) as Partial<AppConfig>;
@@ -73,12 +75,30 @@ export function loadConfig(configPath = 'config.yaml'): AppConfig {
     publish: raw.publish,
   };
 
+  applyEnvOverrides(config);
+
   const validLevels = ['beginner', 'intermediate', 'advanced', 'all'];
   if (!validLevels.includes(config.level)) {
     throw new Error(`Invalid level "${config.level}". Must be one of: ${validLevels.join(', ')}`);
   }
 
   return config;
+}
+
+/**
+ * Environment variables take precedence over config.yaml so the LLM endpoint
+ * can be set per-deployment (e.g. in Docker) without editing the file.
+ * OLLAMA_API_KEY is read at request time in translation.ts.
+ */
+function applyEnvOverrides(config: AppConfig): void {
+  const host = process.env.OLLAMA_HOST?.trim();
+  if (host) {
+    // Accept bare "host:port" the way the Ollama CLI does.
+    const url = /^https?:\/\//i.test(host) ? host : `http://${host}`;
+    config.translation.ollama.url = url.replace(/\/+$/, '');
+  }
+  const model = process.env.OLLAMA_MODEL?.trim();
+  if (model) config.translation.ollama.model = model;
 }
 
 export function loadSources(sourcesPath = 'sources.yaml'): FeedSource[] {

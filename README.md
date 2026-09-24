@@ -57,6 +57,9 @@ Copy `.env.example` to `.env` and fill in the ones you want.
 |----------|----------|
 | `ELEVENLABS_API_KEY` | ElevenLabs TTS (highest-quality Japanese audio) |
 | `OPENAI_API_KEY` | OpenAI TTS fallback (`tts-1` / `tts-1-hd`) |
+| `OLLAMA_HOST` | Ollama URL for translation (overrides `translation.ollama.url`; bare `host:port` accepted) |
+| `OLLAMA_MODEL` | Ollama model (overrides `translation.ollama.model`) |
+| `OLLAMA_API_KEY` | Optional Bearer token for a proxied/hosted Ollama endpoint |
 | `GOOGLE_API_KEY` | Google Cloud Translation fallback |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 publish (falls back to `~/.aws/credentials` or IAM role if unset) |
 | `AWS_REGION` | S3 region (default `us-east-1`) |

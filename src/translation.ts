@@ -4,10 +4,17 @@ import type { AppConfig, TranslationProvider } from './types.js';
 
 type ResolvedTranslationProvider = 'ollama' | 'google' | 'disabled';
 
+/** Auth header for Ollama behind a proxy or a hosted endpoint; optional. */
+function ollamaAuthHeaders(): Record<string, string> {
+  const key = process.env.OLLAMA_API_KEY?.trim();
+  return key ? { Authorization: `Bearer ${key}` } : {};
+}
+
 /** Check if Ollama is reachable at the configured URL. */
 async function isOllamaReachable(url: string): Promise<boolean> {
   try {
     const res = await fetch(`${url}/api/tags`, {
+      headers: ollamaAuthHeaders(),
       signal: AbortSignal.timeout(2000),
     });
     return res.ok;
@@ -82,7 +89,7 @@ async function translateOllama(sentence: string, config: AppConfig): Promise<str
   try {
     res = await fetch(`${url}/api/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...ollamaAuthHeaders() },
       body: JSON.stringify({ model, prompt, stream: false }),
       signal: AbortSignal.timeout(30000),
     });

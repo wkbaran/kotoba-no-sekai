@@ -1,0 +1,28 @@
+# Usage (from repo root):
+#   docker compose -f docker/compose.yaml run --rm kotoba              # daily run
+#   docker compose -f docker/compose.yaml run --rm kotoba --publish    # sync to S3/R2
+#   docker compose -f docker/compose.yaml run --rm kotoba --word 食べる
+
+services:
+  kotoba:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: kotoba-no-sekai
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      # LLM (Ollama API) used for sentence translation. Defaults to an Ollama
+      # server on the Docker host. OLLAMA_API_KEY is optional; when set it is
+      # sent as a Bearer token (for a proxied or hosted endpoint).
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+    extra_hosts:
+      # Makes host.docker.internal resolve on Linux too.
+      - host.docker.internal:host-gateway
+    volumes:
+      - ../output:/app/output
+      - ../config.yaml:/app/config.yaml:ro
+      - ../sources.yaml:/app/sources.yaml:ro
