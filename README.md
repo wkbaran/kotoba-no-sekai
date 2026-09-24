@@ -12,7 +12,7 @@ Reads Japanese news and graded-reader feeds, picks new words at your JLPT level,
 ![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-[See it live](https://kotoba.billbaran.us/) · [How it works](#how-it-works) · [Quick start](#quick-start) · [CLI](docs/CLI.md) · [Configuration](docs/CONFIGURATION.md) · [Publishing](docs/PUBLISHING.md)
+[How it works](#how-it-works) · [Quick start](#quick-start) · [CLI](docs/CLI.md) · [Configuration](docs/CONFIGURATION.md) · [Publishing](docs/PUBLISHING.md)
 
 <img src="docs/images/digest.png" alt="A day's study page: the word 地理 set large, its reading ちり and meaning geography revealed, the sentence from Asahi Shimbun it came from, and a bar with Back, Speed and Next word" width="860">
 
@@ -30,6 +30,25 @@ Reads Japanese news and graded-reader feeds, picks new words at your JLPT level,
 </table>
 
 </div>
+
+## What it uses
+
+Only the dictionary and the feeds are needed. Everything else is optional, and the pipeline keeps working without it.
+
+| What | Service | Needed? |
+|---|---|---|
+| Articles | RSS feeds and JSON APIs listed in `sources.yaml` | Yes |
+| Meanings, parts of speech, JLPT levels | [Jisho.org](https://jisho.org/) API, which serves [JMdict/EDICT](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) with JLPT levels from [Jonathan Waller's lists](https://www.tanos.co.uk/jlpt/) | Yes. Free, no key, rate-limited to one call per 1.25 s |
+| Word splitting and furigana | [kuromoji](https://github.com/takuyaa/kuromoji.js), bundled | Yes, runs locally |
+| Sentence translation | [Ollama](https://ollama.com) running locally (`translategemma:27b`), or Google Cloud Translation | Optional |
+| Audio | [ElevenLabs](https://elevenlabs.io/) or OpenAI text-to-speech | Optional. Without it, the browser speaks the text |
+| Hosting | AWS S3 + CloudFront (template included) or Cloudflare R2 | Optional. The site is plain HTML files |
+
+The site loads its fonts (M PLUS 1) from Google Fonts. There's no other JavaScript framework or build step for the pages; each one is a single HTML file.
+
+## Colors from Wada Sanzo
+
+The site's colors come from [*A Dictionary of Color Combinations*](https://en.wikipedia.org/wiki/Sanzo_Wada), Wada Sanzo's 1930s study of color pairings, still in print. The swatch button in the header opens a palette picker with six of his three-color combinations (the default is No. 166: deep slate green, Naples yellow and grenadine pink). Each combination supplies the background, the text and one accent, and every other shade on the page is mixed from those three. Light and dark modes swap the background and text, and you can mix your own.
 
 ## How it works
 
@@ -51,25 +70,6 @@ Once a day the pipeline:
 - **Days and All words.** Every past day is on a calendar. All words can be searched in kanji, kana or English, filtered by JLPT level, and switched into a self-test with the English hidden.
 
 It also writes an Anki-ready JSON file and a Markdown digest each day.
-
-### Colors from Wada Sanzo
-
-The site's colors come from [*A Dictionary of Color Combinations*](https://en.wikipedia.org/wiki/Sanzo_Wada), Wada Sanzo's 1930s study of color pairings, still in print. The swatch button in the header opens a palette picker with six of his three-color combinations (the default is No. 166: deep slate green, Naples yellow and grenadine pink). Each combination supplies the background, the text and one accent, and every other shade on the page is mixed from those three. Light and dark modes swap the background and text, and you can mix your own.
-
-### What it uses
-
-Only the dictionary and the feeds are needed. Everything else is optional, and the pipeline keeps working without it.
-
-| What | Service | Needed? |
-|---|---|---|
-| Articles | RSS feeds and JSON APIs listed in `sources.yaml` | Yes |
-| Meanings, parts of speech, JLPT levels | [Jisho.org](https://jisho.org/) API, which serves [JMdict/EDICT](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) with JLPT levels from [Jonathan Waller's lists](https://www.tanos.co.uk/jlpt/) | Yes. Free, no key, rate-limited to one call per 1.25 s |
-| Word splitting and furigana | [kuromoji](https://github.com/takuyaa/kuromoji.js), bundled | Yes, runs locally |
-| Sentence translation | [Ollama](https://ollama.com) running locally (`translategemma:27b`), or Google Cloud Translation | Optional |
-| Audio | [ElevenLabs](https://elevenlabs.io/) or OpenAI text-to-speech | Optional. Without it, the browser speaks the text |
-| Hosting | AWS S3 + CloudFront (template included) or Cloudflare R2 | Optional. The site is plain HTML files |
-
-The site loads its fonts (M PLUS 1) from Google Fonts. There's no other JavaScript framework or build step for the pages; each one is a single HTML file.
 
 ## Quick start
 
