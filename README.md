@@ -1,203 +1,94 @@
-# 言葉の世界 — Kotoba no Sekai
+<div align="center">
 
-**World of Words** — an automated Japanese vocabulary pipeline that discovers real vocabulary from authentic Japanese web sources.
+# 言葉の世界 Kotoba no Sekai
 
-Fetches articles from a configurable set of RSS feeds, extracts vocabulary, looks up definitions and JLPT levels, and writes ready-to-use output artifacts before exiting cleanly. Designed to run on a schedule via cron, GitHub Actions, or any task runner.
+**A few real Japanese words a day, taken from today's news.**
 
----
+Reads Japanese news and graded-reader feeds, picks new words at your JLPT level, and publishes a daily study page. Each word comes with its reading, meaning, audio, and the sentences it actually appeared in.
 
-## Outputs
+![Node 20.6+](https://img.shields.io/badge/node-20.6%2B-339933?logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![JMdict via Jisho](https://img.shields.io/badge/dictionary-JMdict%20via%20Jisho-c0392b)
+![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)
 
-Each run produces files named by date:
+[See it live](https://kotoba.billbaran.us/) · [How it works](#how-it-works) · [Quick start](#quick-start) · [CLI](docs/CLI.md) · [Configuration](docs/CONFIGURATION.md) · [Publishing](docs/PUBLISHING.md)
 
-| File | Description |
-|------|-------------|
-| `output/data/words-YYYY-MM-DD.json` | Anki-compatible JSON (note type: Basic) |
-| `output/web/digest-YYYY-MM-DD.md` | Markdown reading digest with glossed examples |
-| `output/web/digest-YYYY-MM-DD.html` | Self-contained HTML page, readable immediately in a browser |
+<img src="docs/images/digest.png" alt="A day's study page: the word 地理 set large, its reading ちり and meaning geography revealed, the sentence from Asahi Shimbun it came from, and a bar with Back, Speed and Next word" width="860">
 
-Three index pages are maintained automatically:
+<table>
+  <tr>
+    <td width="26%"><img src="docs/images/digest-phone.png" alt="On a phone: a review word drawn in outline, its reading shown and its meaning still covered"></td>
+    <td width="37%"><img src="docs/images/days.png" alt="The home page: the newest words with a Study these words button, above a calendar of every day's words"></td>
+    <td width="37%"><img src="docs/images/words.png" alt="All words, searched for てん with English hidden for self-testing"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Review words come back in outline</sub></td>
+    <td align="center"><sub>Every day on a calendar</sub></td>
+    <td align="center"><sub>Search every word, or hide the English to test yourself</sub></td>
+  </tr>
+</table>
 
-| File | Description |
-|------|-------------|
-| `output/web/index.html` | Chronological archive of all daily/automated runs |
-| `output/web/manual.html` | Chronological archive of all manual runs (`--word`, `--source`, `--url`) |
-| `output/web/words.html` | Master word list, sorted A–Z by English definition, with JLPT level badges |
+</div>
 
-All three index pages include a nav bar linking between them. Running `--rebuild-index` regenerates all three from the existing manifests and digest files.
+## How it works
 
----
+Once a day the pipeline:
 
-## Requirements
+1. **Reads the feeds** in `sources.yaml` (NHK News, NHK Web Easy, Asahi Shimbun and Watanoc by default), shuffled so the words come from different topics.
+2. **Finds candidate words** by splitting each article into words with [kuromoji](https://github.com/takuyaa/kuromoji.js), a Japanese morphological analyzer, and keeping nouns, verbs and adjectives.
+3. **Keeps the ones worth learning.** A word must be new to you (tracked in a local SQLite database), have a dictionary entry, match your JLPT level, and appear in a usable example sentence. It takes at most one word per article.
+4. **Adds what you need to study it:** furigana for every word in the example sentence, a translation of the sentence, and audio of the word and sentence at three speeds.
+5. **Brings back one earlier word** for review, starting with the oldest words that haven't been reviewed yet.
+6. **Writes the site** and, if configured, uploads it to S3 or R2.
 
-- Node.js 20.6+
-- Internet access (RSS feeds + Jisho API for definitions)
+### The study page
 
----
+- **One word at a time.** The reading and meaning stay covered until you ask, and the main button steps you through: show the reading, show the meaning, next word. Space does the same. A "Hide" button covers them again.
+- **A length hint.** The covered reading shows one circle per kana, with a smaller circle for small kana like ょ.
+- **Where it came up.** The real sentences from the article, with the word highlighted, furigana on tap or always on, the English behind a disclosure, and a link to the article (plus a saved copy in case the link dies).
+- **Audio** at normal, slow and slower speeds. It falls back to the browser's own speech when there's no recording.
+- **Days and All words.** Every past day is on a calendar. All words can be searched in kanji, kana or English, filtered by JLPT level, and switched into a self-test with the English hidden.
+- A palette picker built on combinations from Wada Sanzo's *A Dictionary of Color Combinations*, with light and dark modes.
 
-## Setup
+It also writes an Anki-ready JSON file and a Markdown digest each day.
+
+### What it uses
+
+Only the dictionary and the feeds are needed. Everything else is optional, and the pipeline keeps working without it.
+
+| What | Service | Needed? |
+|---|---|---|
+| Articles | RSS feeds and JSON APIs listed in `sources.yaml` | Yes |
+| Meanings, parts of speech, JLPT levels | [Jisho.org](https://jisho.org/) API, which serves [JMdict/EDICT](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) with JLPT levels from [Jonathan Waller's lists](https://www.tanos.co.uk/jlpt/) | Yes. Free, no key, rate-limited to one call per 1.25 s |
+| Word splitting and furigana | [kuromoji](https://github.com/takuyaa/kuromoji.js), bundled | Yes, runs locally |
+| Sentence translation | [Ollama](https://ollama.com) running locally (`translategemma:27b`), or Google Cloud Translation | Optional |
+| Audio | [ElevenLabs](https://elevenlabs.io/) or OpenAI text-to-speech | Optional. Without it, the browser speaks the text |
+| Hosting | AWS S3 + CloudFront (template included) or Cloudflare R2 | Optional. The site is plain HTML files |
+
+The site loads its fonts (M PLUS 1) from Google Fonts. There's no other JavaScript framework or build step for the pages; each one is a single HTML file.
+
+## Quick start
+
+You need Node.js 20.6 or newer.
 
 ```bash
 npm install
 npm run build
-cp .env.example .env   # then fill in any keys you want
-```
-
-Edit `sources.yaml` to configure your RSS feeds (see the commented examples inside).
-Edit `config.yaml` to set your preferred difficulty level, output paths, TTS provider, and translation provider.
-
----
-
-## Environment Variables
-
-All keys are optional — the pipeline degrades gracefully when they are absent.
-Copy `.env.example` to `.env` and fill in the ones you want.
-
-| Variable | Used for |
-|----------|----------|
-| `ELEVENLABS_API_KEY` | ElevenLabs TTS (highest-quality Japanese audio) |
-| `OPENAI_API_KEY` | OpenAI TTS fallback (`tts-1` / `tts-1-hd`) |
-| `OLLAMA_HOST` | Ollama URL for translation (overrides `translation.ollama.url`; bare `host:port` accepted) |
-| `OLLAMA_MODEL` | Ollama model (overrides `translation.ollama.model`) |
-| `OLLAMA_API_KEY` | Optional Bearer token for a proxied/hosted Ollama endpoint |
-| `GOOGLE_API_KEY` | Google Cloud Translation fallback |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | S3 publish (falls back to `~/.aws/credentials` or IAM role if unset) |
-| `AWS_REGION` | S3 region (default `us-east-1`) |
-| `CLOUDFRONT_DISTRIBUTION_ID` | CloudFront distribution ID — if set, `--publish` invalidates the cache automatically |
-| `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | R2 publish |
-| `DEBUG` | Print full error stack traces when set to any value |
-
-**TTS priority (when `tts.provider = auto`):** ElevenLabs → OpenAI → browser Web Speech API
-**Translation priority (when `translation.provider = auto`):** Ollama (local, no key needed) → Google Translate → disabled
-
----
-
-## Usage
-
-```bash
-# Standard run — collects max_words_per_run words from shuffled feeds
 npm start
-
-# Override level or word count
-npm start -- --level intermediate
-npm start -- --max 10
-
-# Manual modes — produce a 1-word digest on manual.html
-npm start -- --word 食べる          # search all feeds for this word
-npm start -- --source "NHK News"    # pick a word from a named source
-npm start -- --url https://...      # pick a word from any article URL
-
-# Utilities
-npm start -- --dry-run              # show candidates without writing output
-npm start -- --rebuild-index        # regenerate index.html / manual.html / words.html
-npm start -- --publish              # sync output/web/ to S3 or R2
-npm start -- --config path/to/config.yaml --sources path/to/sources.yaml
-npm start -- --help
 ```
 
----
+Open `output/web/index.html`. The first run collects words at the `beginner` level (JLPT N5 and N4). Change that, the number of words per day, or the feeds in [Configuration](docs/CONFIGURATION.md).
 
-## Word Selection Algorithm
+For translations, run Ollama locally or put a `GOOGLE_API_KEY` in `.env`. For recorded audio, add `ELEVENLABS_API_KEY` or `OPENAI_API_KEY`. `.env.example` lists every setting.
 
-On a standard run the pipeline:
+To study a word you choose, run `npm start -- --word 食べる`. [CLI](docs/CLI.md) has every command.
 
-1. Fetches all articles from all enabled feeds and shuffles them together into a single flat list (feeds are shuffled first, then articles within each feed, then the combined list is shuffled again for maximum topic variety).
-2. Iterates through the list one article at a time. For each article it tokenizes the text, then walks the candidate tokens in order checking: not already in the SQLite deduplication DB → Jisho lookup succeeds → JLPT level matches the configured level → at least one example sentence is found. The first candidate to pass all checks becomes a collected word.
-3. At most one word is taken per article, then the pipeline advances to the next article for the next word. This ensures each collected word comes from a different topic.
-4. Stops once `max_words_per_run` words are collected.
+## Docs
 
-For **`--word`** (`npm start -- --word 食べる`) the pipeline searches every article (each at most once) for any surface form of the target word using the tokenizer's base form. JLPT level and deduplication checks are skipped — you always get the word you asked for if it appears anywhere in the feeds.
+- [CLI](docs/CLI.md): commands, output files, how words are chosen, and the data format
+- [Configuration](docs/CONFIGURATION.md): `config.yaml`, `sources.yaml` and environment variables
+- [Publishing](docs/PUBLISHING.md): S3 or R2 hosting, the daily scheduled run, and Docker
 
-For **`--source`** and **`--url`** the same per-article logic applies but restricted to a single source or fetched URL, collecting one word.
+## Credits
 
----
-
-## Configuration
-
-### `config.yaml`
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `level` | `beginner` | JLPT band: `beginner` (N5/N4), `intermediate` (N3), `advanced` (N2/N1), `all` |
-| `max_words_per_run` | `4` | Maximum new words to collect each run |
-| `max_examples_per_word` | `2` | Max example sentences per word (non-blocking) |
-| `min_word_length` | `2` | Minimum character length for candidate words |
-| `jisho_delay_ms` | `600` | Delay between Jisho API calls (be polite to the free API) |
-| `output.json` | `output/data` | Directory for JSON output |
-| `output.html` | `output/web` | Directory for HTML output |
-| `output.markdown` | `output/web` | Directory for Markdown output |
-| `database.path` | `output/kotoba.db` | SQLite database for deduplication |
-
-### `sources.yaml`
-
-RSS feeds and their domain tags. Each entry:
-
-```yaml
-feeds:
-  - url: https://www3.nhk.or.jp/rss/news/cat0.xml
-    domain: news
-    name: NHK News
-    enabled: true
-```
-
-Set `enabled: false` to disable a feed without deleting it. The file ships with NHK News, Science, and Life/Society feeds enabled, plus commented-out suggestions for NHK Web Easy and Asahi Shimbun.
-
----
-
-## Publishing
-
-`--publish` syncs `output/web/` to a cloud storage bucket. Only new or changed files are uploaded (MD5 comparison); files deleted locally are removed from the bucket too.
-
-Configure in `config.yaml`:
-
-```yaml
-publish:
-  provider: s3        # or r2
-  s3:
-    bucket: my-kotoba-bucket
-    region: us-east-1
-  r2:
-    bucket: my-kotoba-bucket
-    account_id: your-cloudflare-account-id
-```
-
-**S3** — credentials from env vars, `~/.aws/credentials`, or an IAM role. For HTTPS on a custom domain, put a CloudFront distribution in front and point a Route 53 alias record at it.
-
-**R2** — credentials from `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY`. Enable public access on the bucket to get a free `https://pub-<hash>.r2.dev` URL with no custom domain required.
-
-Both providers are configured in the same block — you can switch between them by changing `provider`.
-
----
-
-## Deduplication
-
-Words are tracked in a local SQLite database (`output/kotoba.db`). A word is skipped on subsequent runs once it has been seen. The database and all output files are excluded from version control.
-
----
-
-## Word Record Schema
-
-Each word in the JSON output:
-
-```json
-{
-  "word": "自然",
-  "reading": "しぜん",
-  "pos": "Noun",
-  "definition": "nature",
-  "altDefinitions": ["spontaneous", "natural"],
-  "examples": [
-    {
-      "markedHtml": "日本の<mark>自然</mark>は美しい。",
-      "plain": "日本の自然は美しい。",
-      "sourceUrl": "https://..."
-    }
-  ],
-  "sourceUrl": "https://...",
-  "domain": "science",
-  "jlptLevel": "N4",
-  "date": "2026-03-22"
-}
-```
-
-Anki notes use the `Basic` note type with fields: `Front`, `Back`, `Example`, `Source`, `Level`, `Domain`.
+Dictionary data comes from the [JMdict/EDICT](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) files, the property of the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/), used under the Group's [licence](https://www.edrdg.org/edrdg/licence.html) and looked up via [Jisho.org](https://jisho.org/). JLPT levels are from [Jonathan Waller's JLPT Resources](https://www.tanos.co.uk/jlpt/). Example sentences belong to their publishers; each page links back to the article.
