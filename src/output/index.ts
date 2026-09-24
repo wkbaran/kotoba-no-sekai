@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import type { WordRecord } from '../types.js';
 import { resolveOutputPath } from '../config.js';
-import { ATTRIBUTION_HTML, ATTRIBUTION_CSS } from './attribution.js';
+import { esc, asDate, longDate, shortDate, pageHead, BASE_CSS, siteHeader, siteFooter, hasCustomRuns } from './theme.js';
+import type { NavPage } from './theme.js';
 
 // ── Types ─────────────────────────────────────────────────
 
@@ -29,16 +30,6 @@ const MANIFEST_FILES: Record<RunMode, string> = {
 const INDEX_FILES: Record<RunMode, string> = {
   auto:   'index.html',
   manual: 'manual.html',
-};
-
-const INDEX_TITLES: Record<RunMode, string> = {
-  auto:   '言葉の世界 — Archive',
-  manual: '言葉の世界 — Custom Runs',
-};
-
-const INDEX_HEADINGS: Record<RunMode, string> = {
-  auto:   '言葉の世界',
-  manual: '言葉の世界 — Custom',
 };
 
 // ── Manifest helpers ──────────────────────────────────────
@@ -85,442 +76,354 @@ function upsertManifest(outputDir: string, mode: RunMode, entry: ManifestEntry):
   return entries;
 }
 
-// ── Index page HTML ───────────────────────────────────────
+// ── Shared bits ───────────────────────────────────────────
 
-function buildIndexPage(entries: ManifestEntry[], mode: RunMode): string {
-  const rows = entries.map(entry => {
-    const chips = entry.words.slice(0, 6).map(w => {
-      const mw = typeof w === 'string' ? { word: w as string, definition: '', jlptLevel: '' } : w;
-      return mw.definition
-        ? `<span class="word-chip"><span class="chip-word">${mw.word}</span><span class="chip-def">${mw.definition}</span></span>`
-        : `<span class="word-chip"><span class="chip-word">${mw.word}</span></span>`;
-    }).join('');
-    return `
-    <a class="entry" href="${entry.file}">
-      <div class="entry-meta">
-        <span class="entry-date">${entry.date}</span>
-        <span class="entry-count">${entry.wordCount} word${entry.wordCount !== 1 ? 's' : ''}</span>
-      </div>
-      <div class="entry-preview">${chips}</div>
-    </a>`;
-  }).join('\n');
+const pageId = (e: ManifestEntry) => e.file.match(/^digest-(.+)\.html$/)?.[1] ?? e.date;
+const asWord = (w: ManifestWord | string): ManifestWord =>
+  typeof w === 'string' ? { word: w, definition: '', jlptLevel: '' } : w;
+const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
-  const empty = entries.length === 0
-    ? '<p class="empty">No digests yet. Run <code>node dist/index.js</code> to generate the first one.</p>'
-    : '';
-
+function listPage(title: string, current: NavPage, showCustom: boolean, css: string, body: string, script = ''): string {
   return `<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${INDEX_TITLES[mode]}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --surface:  #1e1e2e;
-      --bg:       #13131f;
-      --text:     #cdd6f4;
-      --muted:    #6c7086;
-      --accent:   #89b4fa;
-      --border:   #313244;
-      --hover:    #262637;
-      --shadow:   0 2px 12px rgba(0,0,0,.4);
-      --radius:   10px;
-    }
-
-    [data-theme="light"] {
-      --surface:  #ffffff;
-      --bg:       #f8f9fa;
-      --text:     #212529;
-      --muted:    #6c757d;
-      --accent:   #5c6bc0;
-      --border:   #dee2e6;
-      --hover:    #f1f3f5;
-      --shadow:   0 2px 8px rgba(0,0,0,.08);
-    }
-
-    body {
-      font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      padding: 2rem 1rem;
-      min-height: 100vh;
-      transition: background .25s, color .25s;
-    }
-
-    .site-header { text-align: center; margin-bottom: 2.5rem; position: relative; }
-
-    .site-title { font-size: 2rem; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
-    .site-subtitle { color: var(--muted); font-size: .9rem; margin-top: .25rem; }
-
-    .nav-links {
-      margin-top: .6rem;
-      display: flex;
-      justify-content: center;
-      gap: 1.5rem;
-      font-size: .85rem;
-    }
-
-    .nav-links a { color: var(--accent); text-decoration: none; opacity: .75; }
-    .nav-links a:hover { opacity: 1; }
-    .nav-links a.active { opacity: 1; font-weight: 600; text-decoration: underline; }
-
-    .theme-toggle {
-      position: absolute;
-      right: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      border-radius: 20px;
-      padding: .3em .75em;
-      font-size: .8rem;
-      cursor: pointer;
-      transition: color .2s, border-color .2s;
-    }
-
-    .theme-toggle:hover { color: var(--text); border-color: var(--muted); }
-
-    .entry-list {
-      max-width: 680px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: .5rem;
-    }
-
-    .entry {
-      display: flex;
-      flex-direction: column;
-      gap: .6rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: .85rem 1.25rem;
-      text-decoration: none;
-      color: var(--text);
-      box-shadow: var(--shadow);
-      transition: background .15s, border-color .15s;
-    }
-
-    .entry:hover { background: var(--hover); border-color: var(--accent); }
-
-    .entry-meta { display: flex; align-items: baseline; gap: .75rem; }
-
-    .entry-date { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent); }
-    .entry-count { font-size: .8rem; color: var(--muted); white-space: nowrap; }
-
-    .entry-preview { display: flex; flex-wrap: wrap; gap: .4rem; }
-
-    .word-chip {
-      display: inline-flex;
-      align-items: baseline;
-      gap: .3rem;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: .2em .55em;
-      font-size: .85rem;
-    }
-
-    .chip-word { font-weight: 600; color: var(--text); }
-    .chip-def  { color: var(--muted); font-size: .78rem; }
-
-    .empty { text-align: center; color: var(--muted); padding: 3rem 0; }
-    .empty code { background: var(--surface); padding: .1em .4em; border-radius: 4px; font-size: .9em; }
-
-    .site-footer { text-align: center; margin-top: 3rem; color: var(--muted); font-size: .8rem; }
-    ${ATTRIBUTION_CSS}
-
-    @media (max-width: 480px) { .word-chip { font-size: .8rem; } }
-  </style>
+${pageHead(title)}
+<style>
+  ${BASE_CSS}
+  main { padding-top: 2.25rem; }
+  .page-title { font-size: 1.6rem; font-weight: 800; line-height: 1.2; }
+  .lede { color: var(--sub); margin-top: .35rem; }
+  .empty { margin-top: 2rem; padding: 1.25rem 1.4rem; border: 1.5px dashed var(--line-strong); border-radius: 10px; color: var(--sub); max-width: 34rem; }
+  .empty code { font-size: .9em; color: var(--ink); background: var(--surface); padding: .1em .35em; border-radius: 4px; }
+  ${css}
+</style>
 </head>
 <body>
-  <header class="site-header">
-    <h1 class="site-title">${INDEX_HEADINGS[mode]}</h1>
-    <p class="site-subtitle">${entries.length} digest${entries.length !== 1 ? 's' : ''}</p>
-    <nav class="nav-links">
-      <a href="index.html"${mode === 'auto' ? ' class="active"' : ''}>Daily</a>
-      <a href="manual.html"${mode === 'manual' ? ' class="active"' : ''}>Custom</a>
-      <a href="words.html">All Words</a>
-    </nav>
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">☀ Light</button>
-  </header>
-
-  <div class="entry-list">
-    ${rows}
-    ${empty}
-  </div>
-
-  <footer class="site-footer">
-    <p>言葉の世界 — World of Words</p>
-    ${ATTRIBUTION_HTML}
-  </footer>
-
-  <script>
-    (function () {
-      var btn = document.getElementById('themeToggle');
-      var stored = localStorage.getItem('kotoba-theme');
-      if (stored === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-        btn.textContent = '🌙 Dark';
-      }
-      btn.addEventListener('click', function () {
-        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-        if (isLight) {
-          document.documentElement.removeAttribute('data-theme');
-          btn.textContent = '☀ Light';
-          localStorage.setItem('kotoba-theme', 'dark');
-        } else {
-          document.documentElement.setAttribute('data-theme', 'light');
-          btn.textContent = '🌙 Dark';
-          localStorage.setItem('kotoba-theme', 'light');
-        }
-      });
-    })();
-  </script>
+<div class="wrap">
+  ${siteHeader(current, showCustom)}
+  <main>
+${body}
+  </main>
+  ${siteFooter('言葉の世界, a few Japanese words a day from real news and reading sites.')}
+</div>
+${script ? `<script>\n(function () {\n${script}\n})();\n</script>` : ''}
 </body>
 </html>`;
 }
 
-// ── Master words index ────────────────────────────────────
+// ── Days (index.html): the newest day, then a calendar ────
+
+const WEEKDAYS: Array<[string, string]> = [
+  ['日', 'Sunday'], ['月', 'Monday'], ['火', 'Tuesday'], ['水', 'Wednesday'], ['木', 'Thursday'], ['金', 'Friday'], ['土', 'Saturday'],
+];
+
+function monthTable(year: number, month: number, byDay: Map<string, ManifestEntry[]>, newestId: string): string {
+  const first = new Date(year, month, 1);
+  const days = new Date(year, month + 1, 0).getDate();
+  const cells: string[] = [];
+  for (let i = 0; i < first.getDay(); i++) cells.push('<td class="pad"></td>');
+  for (let d = 1; d <= days; d++) {
+    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const runs = byDay.get(iso) ?? [];
+    if (!runs.length) { cells.push(`<td class="${iso > newestId.slice(0, 10) ? 'future' : 'none'}"><span class="d">${d}</span></td>`); continue; }
+    const [main, ...more] = runs;
+    const words = main.words.map(asWord);
+    const label = `${longDate(iso)}: ${words.map(w => `${w.word}${w.definition ? `, ${w.definition}` : ''}`).join('; ')}`;
+    cells.push(`<td class="has${runs.some(r => pageId(r) === newestId) ? ' newest' : ''}">
+          <a href="${esc(main.file)}" aria-label="${esc(label)}" title="${esc(words.map(w => `${w.word}  ${w.definition}`).join('\n'))}">
+            <span class="d">${d}</span>
+            <span class="ws" lang="ja">${words.map(w => `<span>${esc(w.word)}</span>`).join('')}</span>
+            <span class="dots" aria-hidden="true">${words.map(() => '<i></i>').join('')}</span>
+          </a>${more.map((r, k) => `<a class="more" href="${esc(r.file)}">run ${k + 2}</a>`).join('')}
+        </td>`);
+  }
+  while (cells.length % 7) cells.push('<td class="pad"></td>');
+  const rows: string[] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(`<tr>${cells.slice(i, i + 7).join('')}</tr>`);
+
+  const inMonth = [...byDay.entries()].filter(([k]) => k.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`));
+  const wordTotal = inMonth.reduce((n, [, rs]) => n + rs.reduce((m, r) => m + r.words.length, 0), 0);
+  const name = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return `
+    <section class="month" aria-labelledby="m-${year}-${month + 1}">
+      <h2 id="m-${year}-${month + 1}">${name} <span class="m-count">${plural(wordTotal, 'word')}</span></h2>
+      <table>
+        <thead><tr>${WEEKDAYS.map(([j, en]) => `<th scope="col"><abbr lang="ja" title="${en}">${j}</abbr></th>`).join('')}</tr></thead>
+        <tbody>${rows.join('\n')}</tbody>
+      </table>
+    </section>`;
+}
+
+function buildDaysPage(entries: ManifestEntry[], showCustom: boolean): string {
+  const sorted = [...entries].sort((a, b) => pageId(b).localeCompare(pageId(a)));
+  if (!sorted.length) {
+    return listPage('言葉の世界', 'days', showCustom, '', `
+    <h1 class="page-title">No days yet</h1>
+    <p class="empty">The first day's words appear here after the pipeline runs. Start it with <code>npm start</code>.</p>`);
+  }
+
+  const newest = sorted[0];
+  const newestWords = newest.words.map(asWord);
+  const oldest = sorted[sorted.length - 1];
+  const totalWords = new Set(sorted.flatMap(e => e.words.map(w => asWord(w).word))).size;
+  const dayCount = new Set(sorted.map(e => e.date.slice(0, 10))).size;
+
+  const byDay = new Map<string, ManifestEntry[]>();
+  for (const e of [...sorted].reverse()) {
+    const k = e.date.slice(0, 10);
+    byDay.set(k, [...(byDay.get(k) ?? []), e]);
+  }
+  const months: string[] = [];
+  const start = asDate(oldest.date), end = asDate(newest.date);
+  for (let y = end.getFullYear(), m = end.getMonth(); y > start.getFullYear() || (y === start.getFullYear() && m >= start.getMonth()); m--) {
+    if (m < 0) { m = 11; y--; }
+    months.push(monthTable(y, m, byDay, pageId(newest)));
+  }
+
+  const css = `
+  .latest { padding-bottom: 2.5rem; border-bottom: 1px solid var(--line); }
+  .latest-when { color: var(--sub); font-size: 1.15rem; font-weight: 500; }
+  .latest-when strong { color: var(--ink); }
+  .latest-words { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 1.25rem 2.5rem; margin: 1.25rem 0 1.75rem; }
+  .latest-words a { display: block; text-decoration: none; }
+  .latest-words .w { display: block; font-size: clamp(2.6rem, 11vw, 4rem); font-weight: 800; line-height: 1.1; }
+  .latest-words .m { display: block; color: var(--sub); font-size: .9rem; max-width: 14rem; margin-top: .2rem; }
+  .latest-words a:hover .w { color: var(--signal); }
+  .start { display: inline-flex; align-items: center; min-height: 3rem; padding: 0 1.4rem; border-radius: 10px; background: var(--signal); color: var(--ground);
+    font-weight: 700; text-decoration: none; }
+  .start:hover { box-shadow: 0 0 0 2px var(--ink); }
+  .tally { color: var(--muted); font-size: .88rem; margin-top: 1.25rem; }
+
+  .month { margin-top: 2.5rem; }
+  .month h2 { font-size: 1.15rem; font-weight: 800; margin-bottom: .75rem; }
+  .m-count { font-size: .85rem; font-weight: 400; color: var(--muted); margin-left: .5rem; }
+  .month table { width: 100%; border-collapse: separate; border-spacing: 4px; table-layout: fixed; margin: 0 -4px; width: calc(100% + 8px); }
+  .month th { font-size: .8rem; font-weight: 500; color: var(--muted); padding-bottom: .15rem; }
+  .month abbr { text-decoration: none; }
+  .month td { vertical-align: top; height: 6.25rem; border-radius: 8px; font-size: .8rem; }
+  .month td.none { background: var(--surface); }
+  .month td.future .d { display: block; padding: .4rem .5rem; color: var(--line-strong); }
+  .month td.none .d { display: block; padding: .4rem .5rem; color: var(--muted); }
+  .month td.has { background: var(--raised); }
+  .month td.has a:first-child { display: flex; flex-direction: column; height: 100%; padding: .4rem .5rem; text-decoration: none; border-radius: 8px; }
+  .month td.has a:first-child:hover { box-shadow: inset 0 0 0 1.5px var(--signal); }
+  .month td.newest { box-shadow: inset 0 0 0 2px var(--signal); }
+  .month .d { font-weight: 700; }
+  .month .ws { display: flex; flex-direction: column; margin-top: .2rem; font-size: .92rem; font-weight: 600; line-height: 1.35; }
+  .month .ws span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .month .dots { display: none; gap: 3px; margin-top: .3rem; flex-wrap: wrap; }
+  .month .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); }
+  .month .more { display: block; padding: 0 .5rem .3rem; font-size: .72rem; color: var(--sub); }
+  @media (max-width: 640px) {
+    .month table { border-spacing: 3px; margin: 0 -3px; width: calc(100% + 6px); }
+    .month td { height: 3.4rem; }
+    .month td.has a:first-child, .month td.none .d, .month td.future .d { padding: .3rem .35rem; }
+    .month .ws { display: none; }
+    .month .dots { display: flex; }
+  }`;
+
+  const body = `
+    <section class="latest" aria-labelledby="latest-h">
+      <h1 class="latest-when" id="latest-h">Newest words, <strong>${esc(longDate(newest.date))}</strong></h1>
+      <ul class="latest-words">
+        ${newestWords.map((w, i) => `<li><a href="${esc(newest.file)}#w${i + 1}"><span class="w" lang="ja">${esc(w.word)}</span><span class="m">${esc(w.definition)}</span></a></li>`).join('\n        ')}
+      </ul>
+      <a class="start" href="${esc(newest.file)}">Study these words</a>
+      <p class="tally">${plural(totalWords, 'word')} over ${plural(dayCount, 'day')} since ${esc(longDate(oldest.date))}.</p>
+    </section>
+    ${months.join('\n')}`;
+
+  return listPage('言葉の世界', 'days', showCustom, css, body);
+}
+
+// ── Custom runs (manual.html) ─────────────────────────────
+
+function buildCustomPage(entries: ManifestEntry[], showCustom: boolean): string {
+  const sorted = [...entries].sort((a, b) => pageId(b).localeCompare(pageId(a)));
+  const rows = sorted.map(e => `
+      <li>
+        <a href="${esc(e.file)}">
+          <span class="when">${esc(longDate(e.date))}</span>
+          <span class="ws">${e.words.map(asWord).map(w => `<span><b lang="ja">${esc(w.word)}</b> ${esc(w.definition)}</span>`).join('')}</span>
+        </a>
+      </li>`).join('');
+  const css = `
+  .runs { list-style: none; padding: 0; margin-top: 1.75rem; border-top: 1px solid var(--line); }
+  .runs a { display: grid; grid-template-columns: 15rem 1fr; gap: .25rem 1.5rem; padding: 1rem .25rem; border-bottom: 1px solid var(--line); text-decoration: none; }
+  .runs a:hover { background: var(--surface); }
+  .when { color: var(--sub); font-size: .9rem; }
+  .ws { display: flex; flex-direction: column; gap: .2rem; }
+  .ws b { font-size: 1.15rem; margin-right: .5rem; }
+  @media (max-width: 640px) { .runs a { grid-template-columns: 1fr; } }`;
+  const body = `
+    <h1 class="page-title">Custom runs</h1>
+    <p class="lede">Words picked on request rather than by the daily run.</p>
+    ${sorted.length
+      ? `<ol class="runs">${rows}\n    </ol>`
+      : `<p class="empty">No custom runs yet. To study a word you choose, run <code>npm start -- --word 食べる</code>, or pick from one source with <code>--source "NHK News"</code>.</p>`}`;
+  return listPage('言葉の世界 Custom runs', 'custom', showCustom, css, body);
+}
+
+function buildIndexPage(entries: ManifestEntry[], mode: RunMode, showCustom: boolean): string {
+  return mode === 'manual' ? buildCustomPage(entries, showCustom) : buildDaysPage(entries, showCustom);
+}
+
+// ── All words (words.html): search, filter, sort, self-test ──
 
 interface WordRow {
   word: string;
+  reading: string;
   definition: string;
   jlptLevel: string;
-  file: string;
+  date: string;
+  href: string;
 }
 
-function buildWordsPage(rows: WordRow[]): string {
-  const tableRows = rows.map(r => {
-    const levelClass = r.jlptLevel ? `level-${r.jlptLevel.toLowerCase()}` : 'level-unknown';
-    const levelBadge = r.jlptLevel
-      ? `<span class="badge ${levelClass}">${r.jlptLevel}</span>`
-      : '';
-    return `  <tr>
-    <td class="col-def"><a href="${r.file}">${r.definition || '—'}</a></td>
-    <td class="col-word"><a href="${r.file}">${r.word}</a></td>
-    <td class="col-level">${levelBadge}</td>
-  </tr>`;
-  }).join('\n');
+const LEVELS = ['N5', 'N4', 'N3', 'N2', 'N1'];
 
-  const empty = rows.length === 0
-    ? '<tr><td colspan="3" class="empty">No words yet.</td></tr>'
-    : '';
+function buildWordsPage(rows: WordRow[], dayCount: number, showCustom: boolean): string {
+  const items = rows.map(r => {
+    const level = LEVELS.includes(r.jlptLevel) ? r.jlptLevel : '';
+    return `
+      <li data-date="${esc(r.date)}" data-level="${level || 'other'}" data-en="${esc(r.definition.toLowerCase())}" data-kana="${esc(r.reading)}" data-q="${esc(`${r.word} ${r.reading} ${r.definition}`.toLowerCase())}">
+        <a class="w" href="${esc(r.href)}"><b lang="ja">${esc(r.word)}</b>${r.reading && r.reading !== r.word ? `<span lang="ja">${esc(r.reading)}</span>` : ''}</a>
+        <span class="m">${esc(r.definition) || '<i>No meaning saved</i>'}</span>
+        <button class="m-cover" type="button">Show meaning</button>
+        <span class="lv">${level || ''}</span>
+        <span class="dt">${esc(shortDate(r.date))}</span>
+      </li>`;
+  }).join('');
 
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>言葉の世界 — All Words</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  const css = `
+  .tools { position: sticky; top: 0; z-index: 20; margin: 1.5rem -1.25rem 0; padding: .75rem 1.25rem; display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center;
+    background: color-mix(in oklab, var(--ground) 92%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .search { flex: 1 1 100%; min-width: 0; min-height: 2.75rem; padding: 0 .9rem; border-radius: 10px; border: 1.5px solid var(--line-strong); background: var(--surface); font-size: 1rem; }
+  .search:focus { border-color: var(--signal); outline: none; }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+  .seg button { background: none; border: 0; padding: .4rem .65rem; min-height: 2.5rem; cursor: pointer; color: var(--sub); font-size: .88rem; }
+  .seg button + button { border-left: 1px solid var(--line-strong); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+  .seg button:hover:not([aria-pressed="true"]) { color: var(--ink); background: var(--surface); }
+  .sort { min-height: 2.5rem; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--ground); padding: 0 .5rem; font-size: .88rem; }
+  .chip { min-height: 2.5rem; padding: 0 .9rem; border-radius: 999px; border: 1px solid var(--line-strong); background: none; cursor: pointer; font-size: .88rem; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .status { color: var(--muted); font-size: .85rem; margin: .9rem 0 .25rem; }
 
-    :root {
-      --surface:  #1e1e2e;
-      --bg:       #13131f;
-      --text:     #cdd6f4;
-      --muted:    #6c7086;
-      --accent:   #89b4fa;
-      --border:   #313244;
-      --hover:    #262637;
-      --shadow:   0 2px 12px rgba(0,0,0,.4);
-      --radius:   10px;
-    }
+  .words { list-style: none; padding: 0; }
+  .words li { display: grid; grid-template-columns: minmax(8rem, 12rem) 1fr 2.2rem 4.5rem; gap: .25rem 1rem; align-items: baseline;
+    padding: .75rem 0; border-bottom: 1px solid var(--line); }
+  .words li[hidden] { display: none; }
+  .words .w { text-decoration: none; display: flex; flex-direction: column; }
+  .words .w b { font-size: 1.35rem; font-weight: 700; line-height: 1.3; }
+  .words .w span { font-size: .85rem; color: var(--sub); }
+  .words .w:hover b { color: var(--signal); }
+  .words .m i { color: var(--muted); }
+  .words .lv { font-weight: 800; font-size: .85rem; }
+  .words .dt { color: var(--muted); font-size: .8rem; text-align: right; white-space: nowrap; }
+  .m-cover { display: none; justify-self: start; font-size: .82rem; color: var(--sub); background: var(--surface); border: 1.5px dashed var(--line-strong);
+    border-radius: 8px; padding: .3rem .8rem; min-height: 2.25rem; cursor: pointer; }
+  .m-cover:hover { border-color: var(--signal); color: var(--ink); }
+  .hide-en .words li:not(.shown) .m { display: none; }
+  .hide-en .words li:not(.shown) .m-cover { display: block; }
+  .no-match { margin-top: 1.5rem; }
+  .no-match[hidden] { display: none; }
+  .linkish { background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+  @media (max-width: 640px) {
+    .words li { grid-template-columns: 1fr auto; }
+    .words .m, .words .m-cover { grid-column: 1 / -1; grid-row: 2; }
+    .words .lv { grid-column: 2; grid-row: 1; text-align: right; }
+    .words .dt { display: none; }
+    .tools { gap: .5rem; }
+    .search { flex-basis: 100%; }
+  }`;
 
-    [data-theme="light"] {
-      --surface:  #ffffff;
-      --bg:       #f8f9fa;
-      --text:     #212529;
-      --muted:    #6c757d;
-      --accent:   #5c6bc0;
-      --border:   #dee2e6;
-      --hover:    #f1f3f5;
-      --shadow:   0 2px 8px rgba(0,0,0,.08);
-    }
+  const body = `
+    <h1 class="page-title">All words</h1>
+    <p class="lede">Every word so far: ${plural(rows.length, 'word')} from ${plural(dayCount, 'day')}. Select a word to open it on its day.</p>
+    <div class="tools" role="search">
+      <input class="search" id="q" type="search" placeholder="Search kanji, kana or English" aria-label="Search words" autocomplete="off">
+      <div class="seg" role="group" aria-label="JLPT level" id="levels">
+        <button type="button" data-level="" aria-pressed="true">All</button>${LEVELS.map(l => `<button type="button" data-level="${l}" aria-pressed="false">${l}</button>`).join('')}
+      </div>
+      <select class="sort" id="sort" aria-label="Sort order">
+        <option value="new">Newest first</option>
+        <option value="old">Oldest first</option>
+        <option value="en">English A to Z</option>
+        <option value="kana">Reading あ to ん</option>
+      </select>
+      <button class="chip" type="button" id="hide" aria-pressed="false">Hide English</button>
+    </div>
+    <p class="status" id="status" aria-live="polite"></p>
+    <ol class="words" id="words">${items}
+    </ol>
+    <p class="empty no-match" id="none" hidden>No words match. Try the kana spelling, a shorter English word, or <button type="button" class="linkish" id="clear">clear the search and level</button>.</p>`;
 
-    body {
-      font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      padding: 2rem 1rem;
-      min-height: 100vh;
-      transition: background .25s, color .25s;
-    }
+  const script = `
+  var list = document.getElementById('words'), q = document.getElementById('q'), sort = document.getElementById('sort');
+  var status = document.getElementById('status'), none = document.getElementById('none'), hide = document.getElementById('hide');
+  var items = Array.prototype.slice.call(list.children), level = '';
+  // Katakana to hiragana, so "カメラ" and "かめら" find the same words.
+  function norm(s) { return s.toLowerCase().trim().replace(/[\\u30a1-\\u30f6]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0x60); }); }
+  items.forEach(function (li) { li.dataset.nq = norm(li.dataset.q); });
+  var collator = new Intl.Collator('ja');
+  var cmp = {
+    'new': function (a, b) { return b.dataset.date.localeCompare(a.dataset.date); },
+    old: function (a, b) { return a.dataset.date.localeCompare(b.dataset.date); },
+    en: function (a, b) { return a.dataset.en.localeCompare(b.dataset.en); },
+    kana: function (a, b) { return collator.compare(a.dataset.kana, b.dataset.kana); }
+  };
+  function update() {
+    var term = norm(q.value), shown = 0;
+    items.forEach(function (li) {
+      var ok = (!term || li.dataset.nq.indexOf(term) >= 0) && (!level || li.dataset.level === level);
+      li.hidden = !ok; if (ok) shown++;
+    });
+    status.textContent = shown === items.length ? 'Showing all ' + shown + ' words' : 'Showing ' + shown + ' of ' + items.length + ' words';
+    none.hidden = shown > 0;
+  }
+  function resort() { items.slice().sort(cmp[sort.value]).forEach(function (li) { list.appendChild(li); }); }
+  q.addEventListener('input', update);
+  sort.addEventListener('change', resort);
+  document.getElementById('levels').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    level = b.dataset.level;
+    this.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    update();
+  });
+  document.getElementById('clear').addEventListener('click', function () {
+    q.value = ''; document.querySelector('#levels [data-level=""]').click(); q.focus();
+  });
+  var hidden = false;
+  try { hidden = localStorage.getItem('kotoba-words-hide-en') === 'on'; } catch (e) {}
+  function showHide() {
+    document.documentElement.classList.toggle('hide-en', hidden);
+    hide.setAttribute('aria-pressed', String(hidden));
+    items.forEach(function (li) { li.classList.remove('shown'); });
+  }
+  hide.addEventListener('click', function () {
+    hidden = !hidden; try { localStorage.setItem('kotoba-words-hide-en', hidden ? 'on' : 'off'); } catch (e) {}
+    showHide();
+  });
+  list.addEventListener('click', function (e) {
+    var c = e.target.closest('.m-cover'); if (!c) return;
+    var li = c.closest('li'); li.classList.add('shown');
+  });
+  showHide(); update();`;
 
-    .site-header { text-align: center; margin-bottom: 2.5rem; position: relative; }
-
-    .site-title { font-size: 2rem; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
-    .site-subtitle { color: var(--muted); font-size: .9rem; margin-top: .25rem; }
-
-    .nav-links {
-      margin-top: .6rem;
-      display: flex;
-      justify-content: center;
-      gap: 1.5rem;
-      font-size: .85rem;
-    }
-
-    .nav-links a { color: var(--accent); text-decoration: none; opacity: .75; }
-    .nav-links a:hover { opacity: 1; }
-    .nav-links a.active { opacity: 1; font-weight: 600; text-decoration: underline; }
-
-    .theme-toggle {
-      position: absolute;
-      right: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      border-radius: 20px;
-      padding: .3em .75em;
-      font-size: .8rem;
-      cursor: pointer;
-      transition: color .2s, border-color .2s;
-    }
-
-    .theme-toggle:hover { color: var(--text); border-color: var(--muted); }
-
-    .word-table-wrap { max-width: 680px; margin: 0 auto; }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: var(--surface);
-      border-radius: var(--radius);
-      overflow: hidden;
-      box-shadow: var(--shadow);
-    }
-
-    thead th {
-      padding: .6rem 1rem;
-      text-align: left;
-      font-size: .78rem;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-    }
-
-    tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
-    tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: var(--hover); }
-
-    td { padding: .55rem 1rem; vertical-align: middle; }
-
-    .col-def a { color: var(--text); text-decoration: none; font-size: .95rem; }
-    .col-def a:hover { color: var(--accent); }
-
-    .col-word a { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 1rem; }
-    .col-word a:hover { text-decoration: underline; }
-
-    .col-level { width: 4.5rem; }
-
-    .badge {
-      display: inline-block;
-      padding: .15em .5em;
-      border-radius: 4px;
-      font-size: .75rem;
-      font-weight: 600;
-      letter-spacing: .03em;
-    }
-
-    .level-n5 { background: #a6e3a1; color: #1e1e2e; }
-    .level-n4 { background: #94e2d5; color: #1e1e2e; }
-    .level-n3 { background: #89b4fa; color: #1e1e2e; }
-    .level-n2 { background: #cba6f7; color: #1e1e2e; }
-    .level-n1 { background: #f38ba8; color: #1e1e2e; }
-    .level-unknown { background: var(--border); color: var(--muted); }
-
-    [data-theme="light"] .level-n5 { background: #2d7a27; color: #fff; }
-    [data-theme="light"] .level-n4 { background: #1a7a6e; color: #fff; }
-    [data-theme="light"] .level-n3 { background: #3b5fc0; color: #fff; }
-    [data-theme="light"] .level-n2 { background: #7c3aed; color: #fff; }
-    [data-theme="light"] .level-n1 { background: #c0392b; color: #fff; }
-
-    .empty { text-align: center; color: var(--muted); padding: 3rem 0; }
-    .site-footer { text-align: center; margin-top: 3rem; color: var(--muted); font-size: .8rem; }
-    ${ATTRIBUTION_CSS}
-
-    @media (max-width: 480px) {
-      td { padding: .45rem .65rem; }
-      .col-level { width: 3.5rem; }
-    }
-  </style>
-</head>
-<body>
-  <header class="site-header">
-    <h1 class="site-title">言葉の世界</h1>
-    <p class="site-subtitle">${rows.length} word${rows.length !== 1 ? 's' : ''}</p>
-    <nav class="nav-links">
-      <a href="index.html">Daily</a>
-      <a href="manual.html">Custom</a>
-      <a href="words.html" class="active">All Words</a>
-    </nav>
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">☀ Light</button>
-  </header>
-
-  <div class="word-table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>English</th>
-          <th>Japanese</th>
-          <th>Level</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${tableRows}
-        ${empty}
-      </tbody>
-    </table>
-  </div>
-
-  <footer class="site-footer">
-    <p>言葉の世界 — World of Words</p>
-    ${ATTRIBUTION_HTML}
-  </footer>
-
-  <script>
-    (function () {
-      var btn = document.getElementById('themeToggle');
-      var stored = localStorage.getItem('kotoba-theme');
-      if (stored === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-        btn.textContent = '🌙 Dark';
-      }
-      btn.addEventListener('click', function () {
-        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-        if (isLight) {
-          document.documentElement.removeAttribute('data-theme');
-          btn.textContent = '☀ Light';
-          localStorage.setItem('kotoba-theme', 'dark');
-        } else {
-          document.documentElement.setAttribute('data-theme', 'light');
-          btn.textContent = '🌙 Dark';
-          localStorage.setItem('kotoba-theme', 'light');
-        }
-      });
-    })();
-  </script>
-</body>
-</html>`;
+  return listPage('言葉の世界 All words', 'words', showCustom, css, body, script);
 }
 
-export function buildMasterWordsIndex(outputDir: string): void {
+function loadRecords(jsonDir: string, id: string): WordRecord[] | null {
+  try {
+    const p = path.resolve(process.cwd(), jsonDir, `words-${id}.json`);
+    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return (data.fullRecords ?? data) as WordRecord[];
+  } catch {
+    return null;
+  }
+}
+
+export function buildMasterWordsIndex(outputDir: string, jsonDir = 'output/data'): void {
   const autoEntries   = loadManifest(outputDir, 'auto');
   const manualEntries = loadManifest(outputDir, 'manual');
 
@@ -528,30 +431,27 @@ export function buildMasterWordsIndex(outputDir: string): void {
   const rows: WordRow[] = [];
 
   for (const entry of [...autoEntries, ...manualEntries]) {
-    for (const w of entry.words) {
-      const mw = typeof w === 'string' ? { word: w as string, definition: '', jlptLevel: '' } : w;
-      if (!seen.has(mw.word)) {
-        seen.add(mw.word);
-        rows.push({
-          word: mw.word,
-          definition: mw.definition ?? '',
-          jlptLevel: mw.jlptLevel ?? '',
-          file: entry.file,
-        });
-      }
-    }
+    const id = pageId(entry);
+    const records = loadRecords(jsonDir, id);
+    entry.words.map(asWord).forEach((w, i) => {
+      if (seen.has(w.word)) return;
+      seen.add(w.word);
+      const rec = records?.find(r => r.word === w.word);
+      rows.push({
+        word: w.word,
+        reading: rec?.reading ?? '',
+        definition: w.definition || rec?.definition || '',
+        jlptLevel: w.jlptLevel || rec?.jlptLevel || '',
+        date: id,
+        href: `${entry.file}#w${i + 1}`,
+      });
+    });
   }
 
-  rows.sort((a, b) => {
-    const da = a.definition.toLowerCase();
-    const db = b.definition.toLowerCase();
-    if (da && db) return da.localeCompare(db);
-    if (da) return -1;
-    if (db) return 1;
-    return a.word.localeCompare(b.word);
-  });
+  rows.sort((a, b) => b.date.localeCompare(a.date));
+  const dayCount = new Set([...autoEntries, ...manualEntries].map(e => e.date.slice(0, 10))).size;
 
-  const html = buildWordsPage(rows);
+  const html = buildWordsPage(rows, dayCount, manualEntries.length > 0);
   const indexPath = resolveOutputPath(outputDir, 'words.html');
   fs.writeFileSync(indexPath, html, 'utf8');
   console.log(`[output] Words index → ${indexPath} (${rows.length} word${rows.length !== 1 ? 's' : ''})`);
@@ -563,7 +463,8 @@ export function writeIndexOutput(
   records: WordRecord[],
   date: string,
   outputDir: string,
-  mode: RunMode = 'auto'
+  mode: RunMode = 'auto',
+  jsonDir = 'output/data'
 ): void {
   const entry: ManifestEntry = {
     date,
@@ -573,13 +474,13 @@ export function writeIndexOutput(
   };
 
   const entries = upsertManifest(outputDir, mode, entry);
-  const html = buildIndexPage(entries, mode);
+  const html = buildIndexPage(entries, mode, hasCustomRuns(outputDir));
 
   const indexPath = resolveOutputPath(outputDir, INDEX_FILES[mode]);
   fs.writeFileSync(indexPath, html, 'utf8');
   console.log(`[output] ${mode === 'manual' ? 'Manual index' : 'Index'} → ${indexPath}`);
 
-  buildMasterWordsIndex(outputDir);
+  buildMasterWordsIndex(outputDir, jsonDir);
 }
 
 /**
@@ -627,11 +528,11 @@ export function rebuildIndexOutput(outputDir: string, jsonOutputDir: string): vo
     entries.sort((a, b) => b.date.localeCompare(a.date));
     saveManifest(outputDir, mode, entries);
 
-    const html = buildIndexPage(entries, mode);
+    const html = buildIndexPage(entries, mode, hasCustomRuns(outputDir));
     const indexPath = resolveOutputPath(outputDir, INDEX_FILES[mode]);
     fs.writeFileSync(indexPath, html, 'utf8');
     console.log(`[output] ${INDEX_FILES[mode]} rebuilt (${entries.length} entr${entries.length !== 1 ? 'ies' : 'y'})`);
   }
 
-  buildMasterWordsIndex(outputDir);
+  buildMasterWordsIndex(outputDir, jsonOutputDir);
 }

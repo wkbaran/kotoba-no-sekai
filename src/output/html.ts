@@ -1,673 +1,539 @@
 import fs from 'fs';
-import type { WordRecord, JlptLevel } from '../types.js';
+import path from 'path';
+import type { WordRecord } from '../types.js';
 import { resolveOutputPath } from '../config.js';
-import { ATTRIBUTION_HTML, ATTRIBUTION_CSS } from './attribution.js';
+import { esc, longDate, shortDate, pageHead, BASE_CSS, siteHeader, siteFooter, hasCustomRuns } from './theme.js';
 
-function jlptBadge(level: JlptLevel): string {
-  return `<span class="badge badge-jlpt badge-${level.toLowerCase()}">${level}</span>`;
+// Daily digest page: one word at a time, reading and meaning hidden until
+// asked for (active recall), with the example sentences underneath.
+
+type RunMode = 'auto' | 'manual';
+
+// Small kana get a smaller circle in the hidden-reading hint.
+const SMALL_KANA = new Set([...'ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ']);
+
+// Marks the "next day" control so it can be swapped for a link once the
+// following day's digest exists.
+const NEXT_START = '<!--next-day-->';
+const NEXT_END = '<!--/next-day-->';
+
+
+function sourceName(url: string): string {
+  let host: string;
+  try { host = new URL(url).hostname.replace(/^www\d*\./, ''); } catch { return 'the source'; }
+  if (host.endsWith('asahi.com')) return 'Asahi Shimbun';
+  if (host.endsWith('nhk.or.jp')) return 'NHK';
+  if (host.endsWith('watanoc.com')) return 'Watanoc';
+  return host;
 }
 
-function domainBadge(domain: string): string {
-  return `<span class="badge badge-domain">${domain}</span>`;
-}
+const posLabel = (pos: string) => pos.replace(/\s*\(.*\)$/, '').toLowerCase();
 
-function escapeAttr(str: string): string {
-  return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
-function audioEls(srcs: Array<[string, string]>, cls: string, extra = ''): string {
-  return srcs
+function audioTags(sets: Array<[string, string | undefined, string, number?]>, base: string): string {
+  return sets
     .filter(([, src]) => !!src)
-    .map(([speed, src]) => `<audio class="${cls}" data-speed="${speed}"${extra} src="${src}" preload="none"></audio>`)
+    .map(([speed, src, cls, idx]) =>
+      `<audio class="${cls}" data-speed="${speed}"${idx != null ? ` data-index="${idx}"` : ''} src="${base}${src}" preload="none"></audio>`)
     .join('');
 }
 
-function renderCard(record: WordRecord, isReview = false): string {
-  const wordAudioEl = audioEls([
-    ['normal', record.wordAudioFile      ?? ''],
-    ['slow',   record.wordAudioFileSlow  ?? ''],
-    ['vslow',  record.wordAudioFileVslow ?? ''],
-  ], 'audio-word');
-
-  const examples = record.examples.map((ex, i) => {
-    // Review words backfilled from before glossedHtml/articleText existed won't
-    // have them in their stored snapshot — fall back to the always-present
-    // markedHtml rather than crashing on undefined.
-    const linked = (ex.glossedHtml ?? ex.markedHtml).replace(
-      /<mark>(.*?)<\/mark>/g,
-      `<a href="${ex.sourceUrl}" target="_blank" rel="noopener" class="source-link"><mark>$1</mark></a>`
-    );
-    const audioEl = audioEls([
-      ['normal', ex.audioFile      ?? ''],
-      ['slow',   ex.audioFileSlow  ?? ''],
-      ['vslow',  ex.audioFileVslow ?? ''],
-    ], 'audio-ex', ` data-index="${i}"`);
-    const translationEl = ex.translationMarkedHtml
-      ? `<p class="example-translation">${ex.translationMarkedHtml}</p>`
-      : '';
-    const exPlayBtn = `<button class="play-btn play-ex" data-text="${escapeAttr(ex.plain)}" data-index="${i}" aria-label="Play example" title="Play example">▶</button>`;
-    const backupBtn = ex.articleText
-      ? `<button class="backup-btn" data-article-text="${escapeAttr(ex.articleText)}" data-source-url="${escapeAttr(ex.sourceUrl)}" aria-label="View saved article text" title="If the source link above is dead, view a saved copy of the article text">🗄</button>`
-      : '';
-    return `<blockquote class="example" data-index="${i}"><div class="example-top">${exPlayBtn}<span>${linked}</span>${backupBtn}</div>${audioEl}${translationEl}</blockquote>`;
-  }).join('\n');
-
-  const altDefs = record.altDefinitions.length > 0
-    ? `<p class="alt-defs"><em>Also:</em> ${record.altDefinitions.slice(0, 3).join('; ')}</p>`
-    : '';
-
-  // Play button data attributes carry text for Web Speech fallback
-  const playBtn = `<button class="play-btn play-word"
-      data-word="${escapeAttr(record.word)}"
-      data-reading="${escapeAttr(record.reading)}"
-      aria-label="Play pronunciation"
-      title="Play word">▶</button>`;
-
-  const reviewBadge = isReview ? '<span class="badge badge-review">Review</span>' : '';
-
-  return `
-  <article class="word-card${isReview ? ' card-review' : ''}">
-    ${wordAudioEl}
-    <div class="card-header">
-      <div class="word-main">
-        <span class="word-kanji">${record.word}</span>
-        <span class="word-reading">【${record.reading}】</span>
-        ${playBtn}
-      </div>
-      <div class="badges">
-        ${reviewBadge}
-        ${jlptBadge(record.jlptLevel)}
-        ${domainBadge(record.domain)}
-      </div>
-    </div>
-    <p class="pos">${record.pos}</p>
-    <p class="definition">${record.definition}</p>
-    ${altDefs}
-    ${examples}
-  </article>`;
+function readingHint(reading: string): string {
+  const chars = [...reading];
+  const small = chars.filter(c => SMALL_KANA.has(c)).length;
+  const dots = chars.map(c => SMALL_KANA.has(c) ? '<i class="sm"></i>' : '<i></i>').join('');
+  const note = `${chars.length} kana${small ? `, ${small} small` : ''}`;
+  return `<span class="dots" aria-hidden="true">${dots}</span><span class="dots-note">${note}</span>`;
 }
 
-function buildPage(records: WordRecord[], date: string, reviewRecord: WordRecord | null): string {
-  const cards = records.map(r => renderCard(r)).join('\n');
-  const reviewCard = reviewRecord ? renderCard(reviewRecord, true) : '';
+const PLAY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>';
+
+function renderCard(record: WordRecord, index: number, total: number, isReview: boolean, base: string): string {
+  const src = sourceName(record.sourceUrl);
+  const saved = record.examples.find(e => e.articleText)?.articleText;
+  const audio = audioTags([
+    ['normal', record.wordAudioFile, 'audio-word'],
+    ['slow', record.wordAudioFileSlow, 'audio-word'],
+    ['vslow', record.wordAudioFileVslow, 'audio-word'],
+    ...record.examples.flatMap((e, j): Array<[string, string | undefined, string, number]> => [
+      ['normal', e.audioFile, 'audio-ex', j],
+      ['slow', e.audioFileSlow, 'audio-ex', j],
+      ['vslow', e.audioFileVslow, 'audio-ex', j],
+    ]),
+  ], base);
+
+  const examples = record.examples.map((ex, j) => `
+        <li class="ex">
+          <button class="ex-play" type="button" data-play="ex" data-index="${j}" data-text="${esc(ex.plain)}" aria-pressed="false" aria-label="Play this sentence">${PLAY_ICON}</button>
+          <div>
+            <p class="jp" lang="ja">${ex.glossedHtml ?? ex.markedHtml}</p>
+            ${ex.translationMarkedHtml ? `<details class="tr"><summary>English</summary><p>${ex.translationMarkedHtml}</p></details>` : ''}
+          </div>
+        </li>`).join('');
+
+  const also = record.altDefinitions.length
+    ? `<p class="also">Also ${esc(record.altDefinitions.slice(0, 3).join(', '))}</p>`
+    : '';
+
+  return `
+  <section class="card${isReview ? ' is-review' : ''}" id="w${index + 1}" data-entry aria-label="Word ${index + 1} of ${total}">
+    ${audio}
+    <div class="facts">
+      ${isReview ? `<span class="review">Review from ${shortDate(record.date)}</span>` : ''}
+      <span class="level" title="JLPT level">${record.jlptLevel === 'unknown' ? 'No JLPT level' : record.jlptLevel}</span>
+      <span>${esc(posLabel(record.pos))}</span>
+    </div>
+    <div class="head">
+      <h2 class="word" lang="ja">${esc(record.word)}</h2>
+      <button class="say" type="button" data-play="word" data-text="${esc(record.word)}" aria-pressed="false" aria-label="Play ${esc(record.word)}">${PLAY_ICON}</button>
+    </div>
+
+    <div class="answers">
+      <div class="slot" data-slot="reading">
+        <button class="cover" type="button" data-show="reading">${readingHint(record.reading)}<span class="cover-label">Show reading</span></button>
+        <div class="val">
+          <p class="reading" lang="ja">${esc(record.reading)}</p>
+          <button class="hide" type="button" data-hide="reading">Hide</button>
+        </div>
+      </div>
+      <div class="slot" data-slot="meaning">
+        <button class="cover" type="button" data-show="meaning"><span class="cover-label">Show meaning</span></button>
+        <div class="val">
+          <div>
+            <p class="meaning">${esc(record.definition)}</p>
+            ${also}
+          </div>
+          <button class="hide" type="button" data-hide="meaning">Hide</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="context">
+      <div class="context-head">
+        <h3>Where it came up</h3>
+        <button type="button" class="chip" data-furi aria-pressed="false">Furigana</button>
+      </div>
+      <ol class="exs">${examples}
+      </ol>
+      <p class="src">
+        <a href="${esc(record.sourceUrl)}" target="_blank" rel="noopener">Read the article on ${esc(src)}</a>
+        ${saved ? `<button type="button" class="linkish" data-saved="${esc(saved)}" data-src="${esc(record.sourceUrl)}">Saved copy</button>` : ''}
+      </p>
+    </div>
+  </section>`;
+}
+
+function nextDayHtml(next: string | null, base: string): string {
+  const inner = next
+    ? `<a href="${base}digest-${next}.html" rel="next" aria-label="Next day, ${shortDate(next)}">${shortDate(next)} <span aria-hidden="true">›</span></a>`
+    : '<span aria-disabled="true">Next day</span>';
+  return `${NEXT_START}${inner}${NEXT_END}`;
+}
+
+export interface DigestPageOptions {
+  mode?: RunMode;
+  /** Neighbouring digest ids (same mode), for the day links. */
+  prev?: string | null;
+  next?: string | null;
+  /** Prefix for links to the site root and audio, for pages served from a subdirectory. */
+  base?: string;
+  /** Show the Custom link in the site nav. */
+  showCustom?: boolean;
+}
+
+export function buildDigestPage(
+  records: WordRecord[],
+  date: string,
+  reviewRecord: WordRecord | null,
+  opts: DigestPageOptions = {},
+): string {
+  const { mode = 'auto', prev = null, next = null, base = '', showCustom = false } = opts;
+  const all = [
+    ...records.map(r => ({ r, review: false })),
+    ...(reviewRecord ? [{ r: reviewRecord, review: true }] : []),
+  ];
+  const cards = all.map(({ r, review }, i) => renderCard(r, i, all.length, review, base)).join('\n');
+  const tabs = all.map(({ r, review }, i) =>
+    `<li><a href="#w${i + 1}" data-go="${i}" lang="ja"${review ? ' class="is-review" title="Review word"' : ''}>${esc(r.word)}</a></li>`).join('');
 
   return `<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>言葉の世界 — ${date}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+${pageHead(`言葉の世界 ${longDate(date)}`)}
+<style>
+  ${BASE_CSS}
 
-    /* ── Dark theme (default) ── */
-    :root {
-      --surface:      #1e1e2e;
-      --bg:           #13131f;
-      --text:         #cdd6f4;
-      --muted:        #6c7086;
-      --accent:       #89b4fa;
-      --example-bg:   #181825;
-      --example-border: #313244;
-      --example-text: #bac2de;
-      --mark-bg:      #f9e2af33;
-      --mark-hover:   #f9e2af66;
-      --shadow:       0 2px 12px rgba(0,0,0,.4);
-      --radius:       10px;
+  /* ── The day ── */
+  .day { display: flex; align-items: baseline; gap: 1rem; margin-top: 2rem; }
+  .day h1 { font-size: 1rem; font-weight: 700; margin: 0; }
+  .day .kind { font-weight: 400; color: var(--sub); margin-left: .5rem; }
+  .daynav { margin-left: auto; display: flex; gap: .5rem; font-size: .88rem; }
+  .daynav a, .daynav > span { padding: .35rem .7rem; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; white-space: nowrap; }
+  .daynav a:hover { border-color: var(--line-strong); }
+  .daynav > span { color: var(--muted); border-style: dashed; }
 
-      /* JLPT badge colors — dark */
-      --n5-bg: #1a3a2a; --n5-fg: #a6e3a1; --n5-border: #40a02b;
-      --n4-bg: #1e3a1e; --n4-fg: #94e2d5; --n4-border: #179299;
-      --n3-bg: #3a2e0a; --n3-fg: #f9e2af; --n3-border: #df8e1d;
-      --n2-bg: #3a1a0a; --n2-fg: #fab387; --n2-border: #fe640b;
-      --n1-bg: #3a0f0f; --n1-fg: #f38ba8; --n1-border: #d20f39;
-      --uk-bg: #232634; --uk-fg: #a6adc8; --uk-border: #45475a;
+  /* The day's words as tabs: they're the table of contents and the progress. */
+  .tabs { list-style: none; display: flex; gap: .25rem; padding: 0; margin: 1rem 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tabs a { display: block; padding: .5rem .9rem .6rem; text-decoration: none; font-size: 1.1rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .tabs a:hover { color: var(--ink); }
+  .tabs a[aria-current] { color: var(--ink); box-shadow: inset 0 -3px 0 var(--signal); }
+  .tabs a.is-review::after { content: "review"; font-size: .7rem; font-weight: 500; margin-left: .4rem; color: var(--muted); }
 
-      /* card left-border: teal for everything, green only for review */
-      --card-default: #179299;
-      --card-review: #40a02b;
+  /* ── The card ── */
+  main { padding-bottom: 8rem; }
+  .card { padding: 2.5rem 0 1rem; }
+  .js .card:not(.current) { display: none; }
+  .facts { display: flex; gap: .9rem; align-items: baseline; font-size: .88rem; color: var(--sub); }
+  .level { font-weight: 800; color: var(--ink); }
+  .review { color: var(--signal); font-weight: 700; }
 
-      /* domain badge */
-      --domain-bg: #1e2a45; --domain-fg: #89b4fa; --domain-border: #3b5998;
-    }
+  .head { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+  .word { font-size: clamp(5rem, 24vw, 10.5rem); font-weight: 800; line-height: 1.05; letter-spacing: .02em; margin: .5rem 0 .25rem -.04em; }
+  /* Review words are drawn in outline: seen before, being traced again. */
+  .is-review .word { color: transparent; -webkit-text-stroke: clamp(1.5px, .45vw, 2.5px) var(--ink); }
+  .say { width: 3.5rem; height: 3.5rem; border-radius: 50%; border: 1.5px solid var(--line-strong); background: none; cursor: pointer;
+    display: grid; place-items: center; flex-shrink: 0; }
+  .say svg, .ex-play svg { width: 40%; fill: currentColor; margin-left: 8%; }
+  .say:hover, .ex-play:hover { border-color: var(--signal); color: var(--signal); }
+  .playing { background: var(--signal) !important; color: var(--ground) !important; border-color: var(--signal) !important; }
 
-    /* ── Light theme ── */
-    [data-theme="light"] {
-      --surface:      #ffffff;
-      --bg:           #f8f9fa;
-      --text:         #212529;
-      --muted:        #6c757d;
-      --accent:       #5c6bc0;
-      --example-bg:   #f1f3f5;
-      --example-border: #dee2e6;
-      --example-text: #343a40;
-      --mark-bg:      #fff9c4;
-      --mark-hover:   #ffe082;
-      --shadow:       0 2px 8px rgba(0,0,0,.08);
+  /* Answer slots: a covered button until shown; "Hide" covers it again. */
+  .answers { display: grid; grid-template-columns: minmax(10rem, 1fr) 2fr; gap: 1rem; margin-top: 1.5rem; }
+  .slot { position: relative; min-height: 5.25rem; }
+  .cover { position: absolute; inset: 0; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: .4rem;
+    padding: .9rem 1.1rem; background: var(--surface); border: 1.5px dashed var(--line-strong); border-radius: 10px; cursor: pointer;
+    font-size: .9rem; color: var(--sub); text-align: left; }
+  .cover:hover { border-color: var(--signal); color: var(--ink); }
+  .dots { display: flex; align-items: center; gap: .35rem; }
+  .dots i { width: .7rem; height: .7rem; border-radius: 50%; border: 1.5px solid var(--line-strong); }
+  .dots i.sm { width: .45rem; height: .45rem; border-width: 1.25px; }
+  .dots-note { font-size: .75rem; color: var(--muted); }
+  .cover-label { margin-top: .1rem; }
+  .val { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; min-height: 100%;
+    padding: .9rem 1.1rem; border-left: 3px solid var(--signal); visibility: hidden; }
+  .slot.open .cover { display: none; }
+  .slot.open .val { visibility: visible; animation: in .22s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } }
+  .reading { font-size: 1.9rem; font-weight: 500; line-height: 1.3; }
+  .meaning { font-size: 1.5rem; font-weight: 700; line-height: 1.25; }
+  .also { color: var(--sub); margin-top: .3rem; font-size: .95rem; }
+  .hide { flex-shrink: 0; font-size: .8rem; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px;
+    padding: .25rem .7rem; min-height: 2rem; cursor: pointer; }
+  .hide:hover { color: var(--ink); border-color: var(--line-strong); }
 
-      --n5-bg: #e8f5e9; --n5-fg: #2e7d32; --n5-border: #4caf50;
-      --n4-bg: #f1f8e9; --n4-fg: #558b2f; --n4-border: #8bc34a;
-      --n3-bg: #fff8e1; --n3-fg: #f57f17; --n3-border: #ffc107;
-      --n2-bg: #fff3e0; --n2-fg: #e65100; --n2-border: #ff9800;
-      --n1-bg: #fce4ec; --n1-fg: #c62828; --n1-border: #ef5350;
-      --uk-bg: #f5f5f5; --uk-fg: #616161; --uk-border: #9e9e9e;
+  /* ── Context ── */
+  .context { margin-top: 3rem; }
+  .context-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+  .context h3 { font-size: 1rem; font-weight: 700; }
+  .chip { font-size: .82rem; padding: .35rem .8rem; border-radius: 999px; border: 1px solid var(--line-strong); background: none; cursor: pointer; min-height: 2.25rem; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .exs { list-style: none; padding: 0; }
+  .ex { display: grid; grid-template-columns: 2.75rem 1fr; gap: .75rem; padding: 1.1rem 0; border-bottom: 1px solid var(--line); }
+  .ex-play { width: 2.75rem; height: 2.75rem; border-radius: 50%; border: 1px solid var(--line-strong); background: none; cursor: pointer; display: grid; place-items: center; }
+  .ex .jp { font-size: 1.12rem; line-height: 2.1; max-width: 38em; }
+  :root.furi-on .ex .jp { line-height: 2.5; }
+  .tr { margin-top: .35rem; font-size: .92rem; color: var(--sub); }
+  .tr summary { cursor: pointer; width: max-content; color: var(--muted); font-size: .82rem; padding: .2rem 0; }
+  .tr summary:hover { color: var(--ink); }
+  .tr p { margin-top: .3rem; max-width: 36em; }
+  .tr mark { background: none; color: var(--ink); font-weight: 700; }
+  .src { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin-top: 1rem; font-size: .88rem; color: var(--sub); }
+  .linkish { background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; color: var(--sub); }
+  .linkish:hover { color: var(--ink); text-decoration-color: var(--signal); }
 
-      --card-default: #00897b;
-      --card-review: #4caf50;
+  /* Furigana: real <rt> when .furi-on is set, otherwise a tooltip on hover or first tap. */
+  .jp ruby { position: relative; }
+  .jp rt { font-size: .52em; font-weight: 500; color: var(--sub); }
+  :root:not(.furi-on) .jp rt { display: none; }
+  :root:not(.furi-on) .jp ruby::after {
+    content: attr(data-reading); position: absolute; bottom: 100%; left: 50%;
+    transform: translate(-50%, -6px); background: var(--raised); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 6px; padding: .25em .6em;
+    font-size: .8rem; font-weight: 600; white-space: nowrap; box-shadow: var(--shadow);
+    display: none; pointer-events: none; z-index: 20;
+  }
+  :root:not(.furi-on) .jp ruby:hover::after, :root:not(.furi-on) .jp a.tap-active ruby::after { display: block; }
+  .jp .gloss-link { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--line-strong); }
+  .jp .gloss-link:hover { border-bottom-color: var(--signal); background: var(--surface); }
+  .jp mark { background: var(--wash); color: var(--ink); font-weight: 700; padding: 0 .12em; border-radius: 2px; box-shadow: inset 0 -2px 0 var(--signal); }
+  .jp mark rt { color: var(--signal); }
 
-      --domain-bg: #e8eaf6; --domain-fg: #3949ab; --domain-border: #7986cb;
-    }
+  /* ── Bottom bar: the thumb's-reach controls ── */
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: color-mix(in oklab, var(--ground) 88%, transparent);
+    backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding: .7rem 0 calc(.7rem + env(safe-area-inset-bottom)); }
+  .bar .wrap { display: flex; align-items: center; gap: .6rem; }
+  .bar button { min-height: 3rem; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; padding: 0 1rem; font-size: .95rem; }
+  .bar button:hover { border-color: var(--ink); }
+  .bar button:disabled { opacity: .4; cursor: default; }
+  .bar .count { font-size: .88rem; color: var(--sub); margin: 0 auto; }
+  .bar .primary { background: var(--signal); color: var(--ground); border-color: var(--signal); font-weight: 700; min-width: 11rem; }
+  .bar .primary:hover { border-color: var(--ink); }
+  .bar kbd { font: inherit; font-size: .72rem; opacity: .7; margin-left: .5rem; border: 1px solid currentColor; border-radius: 4px; padding: 0 .3rem; }
+  .no-js .bar { display: none; }
 
-    body {
-      font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.7;
-      padding: 2rem 1rem;
-      transition: background .25s, color .25s;
-    }
 
-    /* ── Header ── */
-    .site-header {
-      text-align: center;
-      margin-bottom: 2.5rem;
-      position: relative;
-    }
-
-    .site-title {
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: .05em;
-    }
-
-    .site-subtitle {
-      color: var(--muted);
-      font-size: .9rem;
-      margin-top: .25rem;
-    }
-
-    .theme-toggle {
-      position: absolute;
-      right: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      background: var(--surface);
-      border: 1px solid var(--example-border);
-      color: var(--muted);
-      border-radius: 20px;
-      padding: .3em .75em;
-      font-size: .8rem;
-      cursor: pointer;
-      transition: color .2s, border-color .2s;
-    }
-
-    .theme-toggle:hover { color: var(--text); border-color: var(--muted); }
-
-    .speed-picker {
-      position: absolute;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      display: flex;
-      gap: .25rem;
-    }
-
-    .speed-btn {
-      background: var(--surface);
-      border: 1px solid var(--example-border);
-      color: var(--muted);
-      border-radius: 20px;
-      padding: .3em .6em;
-      font-size: .8rem;
-      cursor: pointer;
-      transition: color .2s, background .2s, border-color .2s;
-    }
-
-    .speed-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-    .speed-btn:hover:not(.active) { color: var(--text); border-color: var(--muted); }
-
-    /* ── Grid ── */
-    .word-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-      gap: 1.25rem;
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-
-    /* ── Cards ── */
-    .word-card {
-      background: var(--surface);
-      border-radius: var(--radius);
-      border-left: 4px solid var(--card-default);
-      padding: 1.25rem 1.5rem;
-      box-shadow: var(--shadow);
-      transition: box-shadow .2s, background .25s;
-    }
-
-    .word-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.3); }
-
-    /* Only two left-border colors on this page: teal (default) and green
-       (review), regardless of JLPT level — level is already shown via badge. */
-    .card-review { border-left-color: var(--card-review); }
-
-    .card-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: .75rem;
-      margin-bottom: .6rem;
-    }
-
-    .word-main {
-      display: flex;
-      align-items: baseline;
-      gap: .4rem;
-      flex-wrap: wrap;
-    }
-
-    .word-kanji  { font-size: 1.75rem; font-weight: 700; }
-    .word-reading { font-size: 1rem; color: var(--muted); }
-
-    .play-btn {
-      background: none;
-      border: 1px solid var(--example-border);
-      color: var(--muted);
-      border-radius: 50%;
-      width: 1.8rem;
-      height: 1.8rem;
-      font-size: .75rem;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: color .15s, border-color .15s, transform .1s;
-      flex-shrink: 0;
-      align-self: center;
-    }
-
-    .play-btn:hover  { color: var(--accent); border-color: var(--accent); }
-    .play-btn.playing { color: var(--accent); border-color: var(--accent); transform: scale(1.1); }
-
-    /* ── Badges ── */
-    .badges {
-      display: flex;
-      gap: .35rem;
-      flex-shrink: 0;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .badge {
-      display: inline-block;
-      font-size: .7rem;
-      font-weight: 700;
-      padding: .2em .55em;
-      border-radius: 4px;
-      border: 1px solid;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-    }
-
-    .badge-n5      { background: var(--n5-bg); color: var(--n5-fg); border-color: var(--n5-border); }
-    .badge-n4      { background: var(--n4-bg); color: var(--n4-fg); border-color: var(--n4-border); }
-    .badge-n3      { background: var(--n3-bg); color: var(--n3-fg); border-color: var(--n3-border); }
-    .badge-n2      { background: var(--n2-bg); color: var(--n2-fg); border-color: var(--n2-border); }
-    .badge-n1      { background: var(--n1-bg); color: var(--n1-fg); border-color: var(--n1-border); }
-    .badge-unknown { background: var(--uk-bg); color: var(--uk-fg); border-color: var(--uk-border); }
-    .badge-domain  { background: var(--domain-bg); color: var(--domain-fg); border-color: var(--domain-border); }
-    .badge-review  { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-
-    /* ── Word info ── */
-    .pos        { font-size: .8rem; color: var(--muted); margin-bottom: .3rem; font-style: italic; }
-    .definition { font-size: 1.05rem; font-weight: 500; margin-bottom: .25rem; }
-    .alt-defs   { font-size: .85rem; color: var(--muted); margin-bottom: .5rem; }
-
-    .example-translation {
-      margin-top: .4rem;
-      font-size: .85rem;
-      color: var(--muted);
-      font-style: italic;
-    }
-
-    /* ── Examples ── */
-    .example {
-      margin-top: .75rem;
-      padding: .6rem 1rem;
-      background: var(--example-bg);
-      border-left: 3px solid var(--example-border);
-      border-radius: 0 var(--radius) var(--radius) 0;
-      font-size: .95rem;
-      color: var(--example-text);
-      transition: background .25s;
-      display: flex;
-      flex-direction: column;
-      gap: .25rem;
-    }
-
-    .example-top {
-      display: flex;
-      align-items: baseline;
-      gap: .5rem;
-    }
-
-    .example-top .play-btn {
-      font-size: .65rem;
-      width: 1.5rem;
-      height: 1.5rem;
-      flex-shrink: 0;
-      align-self: center;
-    }
-
-    .backup-btn {
-      background: none;
-      border: 1px solid var(--example-border);
-      color: var(--muted);
-      border-radius: 50%;
-      width: 1.5rem;
-      height: 1.5rem;
-      font-size: .7rem;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      align-self: center;
-      margin-left: auto;
-      transition: color .15s, border-color .15s;
-    }
-
-    .backup-btn:hover { color: var(--accent); border-color: var(--accent); }
-
-    .example mark {
-      background: var(--mark-bg);
-      color: inherit;
-      border-radius: 2px;
-      padding: 0 2px;
-      font-weight: 700;
-    }
-
-    .source-link { color: inherit; text-decoration: none; }
-    .source-link:hover mark { background: var(--mark-hover); text-decoration: underline; }
-
-    /* Native <rt> is kept in the DOM for semantics/accessibility, but hidden —
-       it's replaced visually by a proper popup tooltip below (real furigana
-       renders too small to read comfortably as a hover reveal). */
-    .example rt {
-      display: none;
-    }
-
-    .example ruby {
-      position: relative;
-    }
-
-    .example ruby::after {
-      content: attr(data-reading);
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%) translateY(-6px);
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--example-border);
-      border-radius: 6px;
-      padding: .3em .65em;
-      font-size: .8rem;
-      font-weight: 600;
-      white-space: nowrap;
-      box-shadow: var(--shadow);
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transition: opacity .12s ease;
-      z-index: 20;
-    }
-
-    .example ruby:hover::after,
-    .example a.tap-active ruby::after {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .gloss-link {
-      color: inherit;
-      text-decoration: none;
-      border-bottom: 1px dotted var(--muted);
-      cursor: pointer;
-    }
-
-    .gloss-link:hover {
-      border-bottom-color: var(--accent);
-      background: var(--example-border);
-      border-radius: 2px;
-    }
-
-    /* ── Footer ── */
-    .site-footer {
-      text-align: center;
-      margin-top: 3rem;
-      color: var(--muted);
-      font-size: .8rem;
-    }
-
-    ${ATTRIBUTION_CSS}
-  </style>
+  @media (max-width: 640px) {
+    .day { flex-wrap: wrap; margin-top: 1.25rem; }
+    .answers { grid-template-columns: 1fr; }
+    .bar .count, .bar kbd { display: none; }
+    .bar .primary { flex: 1; min-width: 0; }
+    .bar .wrap { padding: 0 .75rem; }
+  }
+</style>
 </head>
-<body>
-  <header class="site-header">
-    <div class="speed-picker" id="speedPicker">
-      <button class="speed-btn" data-speed="normal">1×</button>
-      <button class="speed-btn" data-speed="slow">¾×</button>
-      <button class="speed-btn" data-speed="vslow">½×</button>
-    </div>
-    <h1 class="site-title">言葉の世界</h1>
-    <p class="site-subtitle">${date} · ${records.length} word${records.length !== 1 ? 's' : ''}${reviewRecord ? ' · 1 review' : ''}</p>
-    <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">☀ Light</button>
-  </header>
+<body class="no-js">
+<div class="wrap">
+  ${siteHeader(null, showCustom, base)}
 
-  <div class="word-grid">
-    ${cards}
-    ${reviewCard}
+  <div class="day">
+    <h1>${esc(longDate(date))}${mode === 'manual' ? '<span class="kind">Custom run</span>' : ''}</h1>
+    <nav class="daynav" aria-label="Other days">
+      ${prev ? `<a href="${base}digest-${prev}.html" rel="prev" aria-label="Previous day, ${shortDate(prev)}"><span aria-hidden="true">‹</span> ${shortDate(prev)}</a>` : ''}
+      ${nextDayHtml(next, base)}
+    </nav>
   </div>
+  <ol class="tabs" aria-label="Words on this page">${tabs}</ol>
 
-  <footer class="site-footer">
-    <p>Generated by <strong>Kotoba no Sekai</strong> on ${date}</p>
-    ${ATTRIBUTION_HTML}
-  </footer>
+  <main id="cards">
+    ${cards}
+  </main>
 
-  <script>
-    (function () {
+  ${siteFooter(`Words collected from Japanese news and reading sites. Readings and meanings looked up on ${esc(longDate(date))}.`)}
+</div>
 
-      /* ── Theme toggle ── */
-      var btn = document.getElementById('themeToggle');
-      var stored = localStorage.getItem('kotoba-theme');
-      if (stored === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-        btn.textContent = '🌙 Dark';
-      }
-      btn.addEventListener('click', function () {
-        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-        if (isLight) {
-          document.documentElement.removeAttribute('data-theme');
-          btn.textContent = '☀ Light';
-          localStorage.setItem('kotoba-theme', 'dark');
-        } else {
-          document.documentElement.setAttribute('data-theme', 'light');
-          btn.textContent = '🌙 Dark';
-          localStorage.setItem('kotoba-theme', 'light');
-        }
-      });
+<div class="bar" role="toolbar" aria-label="Word controls">
+  <div class="wrap">
+    <button type="button" id="prev" aria-label="Previous word">Back</button>
+    <button type="button" id="speed" aria-label="Playback speed">Speed 1×</button>
+    <span class="count" id="count" aria-live="polite"></span>
+    <button type="button" id="next" class="primary">Show reading<kbd>Space</kbd></button>
+  </div>
+</div>
 
-      /* ── Speed picker ── */
+<script>
+(function () {
+  document.body.classList.remove('no-js');
+  document.documentElement.classList.add('js');
 
-      var speechRates  = { normal: 0.9, slow: 0.65, vslow: 0.45 };
-      var currentSpeed = localStorage.getItem('kotoba-speed') || 'normal';
+  /* ── Audio: recorded file at the chosen speed, else Web Speech ── */
+  var SPEED_KEY = 'kotoba-speed';
+  var speechRates = { normal: 0.9, slow: 0.65, vslow: 0.45 };
+  var speed = 'normal';
+  try { speed = localStorage.getItem(SPEED_KEY) || 'normal'; } catch (e) {}
 
-      var speedBtns = document.querySelectorAll('.speed-btn');
-      speedBtns.forEach(function (b) {
-        if (b.dataset.speed === currentSpeed) b.classList.add('active');
-        b.addEventListener('click', function () {
-          currentSpeed = b.dataset.speed;
-          localStorage.setItem('kotoba-speed', currentSpeed);
-          speedBtns.forEach(function (x) {
-            x.classList.toggle('active', x.dataset.speed === currentSpeed);
-          });
-        });
-      });
+  var playingBtn = null;
+  function stopAll() {
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    document.querySelectorAll('audio').forEach(function (a) { a.pause(); a.currentTime = 0; });
+    if (playingBtn) { playingBtn.classList.remove('playing'); playingBtn.setAttribute('aria-pressed', 'false'); playingBtn = null; }
+  }
+  function say(text, done) {
+    if (!window.speechSynthesis) { done(); return; }
+    var u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = speechRates[speed] || 0.9; u.onend = done;
+    speechSynthesis.speak(u);
+  }
+  function play(btn) {
+    if (btn.classList.contains('playing')) { stopAll(); return; }
+    stopAll();
+    playingBtn = btn; btn.classList.add('playing'); btn.setAttribute('aria-pressed', 'true');
+    var entry = btn.closest('[data-entry]');
+    var sel = btn.dataset.play === 'word' ? '.audio-word' : '.audio-ex[data-index="' + btn.dataset.index + '"]';
+    var el = entry.querySelector(sel + '[data-speed="' + speed + '"]') || entry.querySelector(sel + '[data-speed="normal"]');
+    function done() { if (playingBtn === btn) stopAll(); }
+    if (el) { el.currentTime = 0; el.onended = done; el.play().catch(function () { say(btn.dataset.text, done); }); }
+    else say(btn.dataset.text, done);
+  }
 
-      /* ── Audio playback ── */
+  /* ── Saved copy of the article, for when the source link is dead ── */
+  function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function openSaved(btn) {
+    var win = window.open('', '_blank'); if (!win) return;
+    var text = escapeHtml(btn.dataset.saved || ''), src = escapeHtml(btn.dataset.src || '');
+    win.document.write('<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Saved article text</title><style>body{font-family:"Hiragino Sans","Yu Gothic",sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;line-height:1.9;white-space:pre-wrap}.note{color:#666;font-size:.85rem;border-bottom:1px solid #ddd;padding-bottom:1rem;margin-bottom:1rem;white-space:normal}</style></head><body><p class="note">Saved copy of the article, in case the original link no longer works.<br>Original: <a href="' + src + '">' + src + '</a></p>' + text + '</body></html>');
+    win.document.close();
+  }
 
-      var currentBtn = null;
+  /* ── Word-by-word flow ── */
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[data-go]'));
+  var nextBtn = document.getElementById('next'), prevBtn = document.getElementById('prev');
+  var count = document.getElementById('count'), speedBtn = document.getElementById('speed');
+  var i = Math.max(0, cards.findIndex(function (c) { return '#' + c.id === location.hash; }));
 
-      function speak(text, onEnd) {
-        var utt = new SpeechSynthesisUtterance(text);
-        utt.lang = 'ja-JP';
-        utt.rate = speechRates[currentSpeed] || 0.9;
-        utt.onend = onEnd || null;
-        speechSynthesis.cancel();
-        speechSynthesis.speak(utt);
-      }
+  function isOpen(c, slot) { return c.querySelector('[data-slot="' + slot + '"]').classList.contains('open'); }
+  function setOpen(slot, open) {
+    var s = cards[i].querySelector('[data-slot="' + slot + '"]');
+    s.classList.toggle('open', open);
+    // Keep focus on the matching control so keyboard users don't lose their place.
+    var target = s.querySelector(open ? '[data-hide]' : '[data-show]');
+    if (s.contains(document.activeElement)) target.focus({ preventScroll: true });
+    render();
+  }
+  function render() {
+    cards.forEach(function (c, j) { c.classList.toggle('current', j === i); });
+    tabs.forEach(function (t, j) { if (j === i) t.setAttribute('aria-current', 'step'); else t.removeAttribute('aria-current'); });
+    var c = cards[i], last = i === cards.length - 1;
+    var label = !isOpen(c, 'reading') ? 'Show reading' : !isOpen(c, 'meaning') ? 'Show meaning' : last ? 'Done for today' : 'Next word';
+    nextBtn.firstChild.nodeValue = label;
+    nextBtn.disabled = label === 'Done for today';
+    prevBtn.disabled = i === 0;
+    count.textContent = 'Word ' + (i + 1) + ' of ' + cards.length;
+  }
+  function go(j) {
+    if (j < 0 || j >= cards.length) return;
+    stopAll(); i = j; history.replaceState(null, '', '#' + cards[i].id); render(); window.scrollTo({ top: 0 });
+  }
+  function advance() {
+    var c = cards[i];
+    if (!isOpen(c, 'reading')) setOpen('reading', true);
+    else if (!isOpen(c, 'meaning')) setOpen('meaning', true);
+    else go(i + 1);
+  }
 
-      function playAudioEl(audioEl, onEnd) {
-        audioEl.currentTime = 0;
-        audioEl.onended = onEnd || null;
-        audioEl.play().catch(function () { if (onEnd) onEnd(); });
-      }
+  nextBtn.addEventListener('click', advance);
+  prevBtn.addEventListener('click', function () { go(i - 1); });
+  tabs.forEach(function (t, j) { t.addEventListener('click', function (e) { e.preventDefault(); go(j); }); });
 
-      function markPlaying(btn, on) {
-        if (currentBtn && currentBtn !== btn) {
-          currentBtn.classList.remove('playing');
-          currentBtn.textContent = '▶';
-        }
-        btn.classList.toggle('playing', on);
-        btn.textContent = on ? '■' : '▶';
-        currentBtn = on ? btn : null;
-      }
+  document.addEventListener('click', function (e) {
+    var b;
+    if ((b = e.target.closest('[data-play]'))) play(b);
+    else if ((b = e.target.closest('[data-saved]'))) openSaved(b);
+    else if ((b = e.target.closest('[data-show]'))) setOpen(b.dataset.show, true);
+    else if ((b = e.target.closest('[data-hide]'))) setOpen(b.dataset.hide, false);
+  });
 
-      function stopAll() {
-        speechSynthesis.cancel();
-        document.querySelectorAll('audio').forEach(function (a) { a.pause(); a.currentTime = 0; });
-        if (currentBtn) { markPlaying(currentBtn, false); }
-      }
+  document.addEventListener('keydown', function (e) {
+    if (e.target.closest('input, textarea, select, summary, a, button:not(#next)') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); advance(); }
+    else if (e.key === 'ArrowRight') go(i + 1);
+    else if (e.key === 'ArrowLeft') go(i - 1);
+    else if (e.key === 'p') cards[i].querySelector('.say').click();
+    else if (e.key === 'h') { setOpen('reading', false); setOpen('meaning', false); }
+  });
 
-      function pickAudio(card, cls, extra) {
-        return card.querySelector(cls + '[data-speed="' + currentSpeed + '"]' + extra)
-            || card.querySelector(cls + '[data-speed="normal"]' + extra);
-      }
+  var SPEEDS = ['normal', 'slow', 'vslow'], SPEED_LABEL = { normal: '1×', slow: '¾×', vslow: '½×' };
+  function showSpeed() { speedBtn.textContent = 'Speed ' + SPEED_LABEL[speed]; }
+  speedBtn.addEventListener('click', function () {
+    speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % 3];
+    try { localStorage.setItem(SPEED_KEY, speed); } catch (e) {}
+    showSpeed();
+  });
+  showSpeed();
 
-      /* Word buttons */
-      document.querySelectorAll('.play-word').forEach(function (playBtn) {
-        playBtn.addEventListener('click', function () {
-          if (playBtn.classList.contains('playing')) { stopAll(); return; }
-          stopAll();
-          markPlaying(playBtn, true);
+  /* ── Furigana on/off, remembered ── */
+  var furi = false;
+  try { furi = localStorage.getItem('kotoba-furigana') === 'on'; } catch (e) {}
+  function showFuri() {
+    document.documentElement.classList.toggle('furi-on', furi);
+    document.querySelectorAll('[data-furi]').forEach(function (b) { b.setAttribute('aria-pressed', String(furi)); });
+  }
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-furi]')) return;
+    furi = !furi; try { localStorage.setItem('kotoba-furigana', furi ? 'on' : 'off'); } catch (x) {}
+    showFuri();
+  });
+  showFuri();
 
-          var card        = playBtn.closest('.word-card');
-          var wordAudioEl = pickAudio(card, '.audio-word', '');
+  /* Furigana tap-to-reveal on touch: with furigana off, the first tap on a
+     linked word shows its reading instead of following the link; a second
+     tap follows it. Mouse clicks and keyboard activation navigate at once. */
+  var lastPointer = '';
+  document.addEventListener('pointerdown', function (e) { lastPointer = e.pointerType; }, true);
+  document.addEventListener('click', function (e) {
+    var link = e.target.closest('.jp a');
+    if (link && !furi && e.detail !== 0 && lastPointer === 'touch' && link.querySelector('ruby') && !link.classList.contains('tap-active')) {
+      e.preventDefault();
+      document.querySelectorAll('.tap-active').forEach(function (el) { el.classList.remove('tap-active'); });
+      link.classList.add('tap-active');
+      return;
+    }
+    document.querySelectorAll('.tap-active').forEach(function (el) { if (!el.contains(e.target)) el.classList.remove('tap-active'); });
+  });
 
-          function done() { markPlaying(playBtn, false); }
-
-          if (wordAudioEl && wordAudioEl.src) {
-            playAudioEl(wordAudioEl, done);
-          } else {
-            speak(playBtn.dataset.word, done);
-          }
-        });
-      });
-
-      /* Example buttons */
-      document.querySelectorAll('.play-ex').forEach(function (playBtn) {
-        playBtn.addEventListener('click', function () {
-          if (playBtn.classList.contains('playing')) { stopAll(); return; }
-          stopAll();
-          markPlaying(playBtn, true);
-
-          var text      = playBtn.dataset.text;
-          var idx       = playBtn.dataset.index;
-          var card      = playBtn.closest('.word-card');
-          var exAudioEl = pickAudio(card, '.audio-ex', '[data-index="' + idx + '"]');
-
-          function done() { markPlaying(playBtn, false); }
-
-          if (exAudioEl && exAudioEl.src) {
-            playAudioEl(exAudioEl, done);
-          } else {
-            speak(text, done);
-          }
-        });
-      });
-
-      /* Backup text buttons — open a saved copy in a new tab, for when the
-         source link above is dead. Built client-side so no extra files are
-         needed; works offline too since nothing is fetched. */
-      function escapeHtmlForBackup(s) {
-        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      }
-      document.querySelectorAll('.backup-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var win = window.open('', '_blank');
-          if (!win) return;
-          var text = escapeHtmlForBackup(btn.dataset.articleText || '');
-          var src  = escapeHtmlForBackup(btn.dataset.sourceUrl || '');
-          win.document.write(
-            '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">' +
-            '<title>Saved article text</title><style>' +
-            'body{font-family:"Hiragino Sans","Yu Gothic",sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem;line-height:1.9;white-space:pre-wrap;color:#212529;}' +
-            '.note{color:#6c757d;font-size:.85rem;border-bottom:1px solid #dee2e6;padding-bottom:1rem;margin-bottom:1rem;white-space:normal;}' +
-            'a{color:#5c6bc0;}' +
-            '</style></head><body>' +
-            '<p class="note">Saved copy — the original article may no longer be available.<br>Original: <a href="' + src + '" target="_blank" rel="noopener">' + src + '</a></p>' +
-            text +
-            '</body></html>'
-          );
-          win.document.close();
-        });
-      });
-
-      /* Furigana tap-to-reveal on touch devices: the first tap on a
-         gloss/source link with furigana just reveals the tooltip (via
-         .tap-active) instead of navigating; a second tap on the same word
-         follows the link. Mobile browsers apply a sticky :hover on tap, so
-         :hover can't tell touch from mouse; use the pointerType of the
-         pointerdown that started the click instead. Mouse clicks, keyboard
-         activation (click.detail is 0), and links with no furigana (e.g.
-         kana-only targets) all navigate on the first click. */
-      var lastPointerType = '';
-      document.addEventListener('pointerdown', function (e) { lastPointerType = e.pointerType; }, true);
-      document.querySelectorAll('.example a.gloss-link, .example a.source-link').forEach(function (link) {
-        link.addEventListener('click', function (e) {
-          if (e.detail === 0 || lastPointerType !== 'touch' || !link.querySelector('ruby')) return;
-          if (link.classList.contains('tap-active')) return;
-          e.preventDefault();
-          document.querySelectorAll('.tap-active').forEach(function (el) { el.classList.remove('tap-active'); });
-          link.classList.add('tap-active');
-        });
-      });
-      document.addEventListener('click', function (e) {
-        document.querySelectorAll('.tap-active').forEach(function (el) {
-          if (!el.contains(e.target)) el.classList.remove('tap-active');
-        });
-      });
-
-    })();
-  </script>
+  render();
+})();
+</script>
 </body>
 </html>`;
+}
+
+// ── Neighbouring days ─────────────────────────────────────
+
+const DIGEST_RE = /^digest-(\d{4}-\d{2}-\d{2}(?:-\d+)?)\.html$/;
+
+/** Digest ids on disk for one mode, oldest first. Manual runs are the ones in manual-manifest.json. */
+function digestIds(outputDir: string, mode: RunMode): string[] {
+  const dir = path.resolve(process.cwd(), outputDir);
+  let manual = new Set<string>();
+  try {
+    const entries = JSON.parse(fs.readFileSync(path.join(dir, 'manual-manifest.json'), 'utf8')) as Array<{ date: string }>;
+    manual = new Set(entries.map(e => e.date));
+  } catch { /* no manual runs yet */ }
+  let files: string[] = [];
+  try { files = fs.readdirSync(dir); } catch { return []; }
+  return files
+    .map(f => f.match(DIGEST_RE)?.[1])
+    .filter((id): id is string => !!id && manual.has(id) === (mode === 'manual'))
+    .sort();
+}
+
+function neighbours(ids: string[], date: string): { prev: string | null; next: string | null } {
+  const earlier = ids.filter(id => id < date);
+  const later = ids.filter(id => id > date);
+  return { prev: earlier.at(-1) ?? null, next: later[0] ?? null };
+}
+
+/** Point the previous digest's "next day" control at this one (pages written before this existed have no marker; left alone). */
+function linkFromPrevious(outputDir: string, prev: string, date: string): void {
+  const p = resolveOutputPath(outputDir, `digest-${prev}.html`);
+  let html: string;
+  try { html = fs.readFileSync(p, 'utf8'); } catch { return; }
+  const start = html.indexOf(NEXT_START), end = html.indexOf(NEXT_END);
+  if (start < 0 || end < start) return;
+  const updated = html.slice(0, start) + nextDayHtml(date, '') + html.slice(end + NEXT_END.length);
+  if (updated !== html) fs.writeFileSync(p, updated, 'utf8');
 }
 
 export function writeHtmlOutput(
   records: WordRecord[],
   date: string,
   outputDir: string,
-  reviewRecord: WordRecord | null = null
+  reviewRecord: WordRecord | null = null,
+  mode: RunMode = 'auto',
 ): string {
-  const html = buildPage(records, date, reviewRecord);
   const filename = `digest-${date}.html`;
+  const ids = [...new Set([...digestIds(outputDir, mode), date])].sort();
+  const { prev, next } = neighbours(ids, date);
+  const html = buildDigestPage(records, date, reviewRecord, { mode, prev, next, showCustom: hasCustomRuns(outputDir) || mode === 'manual' });
   const outPath = resolveOutputPath(outputDir, filename);
   fs.writeFileSync(outPath, html, 'utf8');
+  if (prev) linkFromPrevious(outputDir, prev, date);
   console.log(`[output] HTML → ${outPath}`);
   return outPath;
+}
+
+/**
+ * Re-render every digest page from its words-<date>.json, so older days pick
+ * up the current design. Only rewrites digests that already exist on disk.
+ */
+export function rebuildDigests(outputDir: string, jsonOutputDir: string): void {
+  let count = 0;
+  const showCustom = hasCustomRuns(outputDir);
+  for (const mode of ['auto', 'manual'] as RunMode[]) {
+    const ids = digestIds(outputDir, mode);
+    for (const id of ids) {
+      const jsonPath = path.resolve(process.cwd(), jsonOutputDir, `words-${id}.json`);
+      if (!fs.existsSync(jsonPath)) {
+        console.warn(`[output] Skipping digest-${id}.html: no ${path.basename(jsonPath)}`);
+        continue;
+      }
+      const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      const records: WordRecord[] = data.fullRecords ?? data;
+      const { prev, next } = neighbours(ids, id);
+      const html = buildDigestPage(records, id, data.reviewWord ?? null, { mode, prev, next, showCustom });
+      fs.writeFileSync(resolveOutputPath(outputDir, `digest-${id}.html`), html, 'utf8');
+      count++;
+    }
+  }
+  console.log(`[output] ${count} digest page${count !== 1 ? 's' : ''} rebuilt`);
 }

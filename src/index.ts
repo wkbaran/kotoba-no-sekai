@@ -22,6 +22,7 @@ import path from 'path';
 import { loadConfig, loadSources, ensureOutputDirs, resolveRunSlug } from './config.js';
 import { runPipeline, runWordPipeline, runSourcePipeline, runUrlPipeline } from './pipeline.js';
 import { rebuildIndexOutput } from './output/index.js';
+import { rebuildDigests } from './output/html.js';
 import { publishOutput } from './publish.js';
 import { WordDatabase } from './db.js';
 import type { WordRecord } from './types.js';
@@ -36,6 +37,8 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
       args['dry-run'] = true;
     } else if (arg === '--rebuild-index') {
       args['rebuild-index'] = true;
+    } else if (arg === '--rebuild-digests') {
+      args['rebuild-digests'] = true;
     } else if (arg === '--backfill-reviews') {
       args['backfill-reviews'] = true;
     } else if (arg.startsWith('--')) {
@@ -70,6 +73,7 @@ OPTIONS
   --url     <url>     Fetch a specific article URL and select one word from it
   --publish           Sync output/web/ to the configured S3 or R2 bucket, then exit
   --rebuild-index     Rebuild index.html / manual.html / words.html, then exit
+  --rebuild-digests   Re-render every digest-*.html from its words-*.json, then exit
   --backfill-reviews  Populate review snapshots from historical words-*.json, then exit
   --help, -h          Show this help
 
@@ -107,6 +111,11 @@ async function main(): Promise<void> {
   // Utility commands — run immediately without loading feeds or printing the pipeline header
   if (args['rebuild-index']) {
     rebuildIndexOutput(config.output.html, config.output.json);
+    return;
+  }
+
+  if (args['rebuild-digests']) {
+    rebuildDigests(config.output.html, config.output.json);
     return;
   }
 

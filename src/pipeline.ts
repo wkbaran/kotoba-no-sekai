@@ -82,8 +82,8 @@ function writeRunOutputs(
 ): { json: string; markdown: string; html: string } {
   const jsonPath = writeJsonOutput(records, date, config.output.json, reviewRecord);
   const mdPath   = writeMarkdownOutput(records, date, config.output.markdown, reviewRecord);
-  const htmlPath = writeHtmlOutput(records, date, config.output.html, reviewRecord);
-  writeIndexOutput(records, date, config.output.html, mode);
+  const htmlPath = writeHtmlOutput(records, date, config.output.html, reviewRecord, mode);
+  writeIndexOutput(records, date, config.output.html, mode, config.output.json);
   return { json: jsonPath, markdown: mdPath, html: htmlPath };
 }
 
