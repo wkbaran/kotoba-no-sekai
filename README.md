@@ -10,6 +10,7 @@ Reads Japanese news and graded-reader feeds, picks new words at your JLPT level,
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![JMdict via Jisho](https://img.shields.io/badge/dictionary-JMdict%20via%20Jisho-c0392b)
 ![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 [See it live](https://kotoba.billbaran.us/) · [How it works](#how-it-works) · [Quick start](#quick-start) · [CLI](docs/CLI.md) · [Configuration](docs/CONFIGURATION.md) · [Publishing](docs/PUBLISHING.md)
 
@@ -88,6 +89,12 @@ To study a word you choose, run `npm start -- --word 食べる`. [CLI](docs/CLI.
 - [CLI](docs/CLI.md): commands, output files, how words are chosen, and the data format
 - [Configuration](docs/CONFIGURATION.md): `config.yaml`, `sources.yaml` and environment variables
 - [Publishing](docs/PUBLISHING.md): S3 or R2 hosting, the daily scheduled run, and Docker
+
+## License
+
+The code is [AGPL-3.0](LICENSE). You can use, change and self-host it. If you run a modified version as a public site, you must publish your changes under the same license.
+
+The license covers the code, not what the site publishes. Dictionary data in the pages and JSON is JMdict, under its own [CC BY-SA 4.0 licence](https://www.edrdg.org/edrdg/licence.html), and example sentences and article text belong to their publishers.
 
 ## Credits
 
