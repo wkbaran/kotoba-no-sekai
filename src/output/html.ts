@@ -49,8 +49,6 @@ function readingHint(reading: string): string {
 
 const PLAY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>';
 
-const CLASS_NAME = { 'i-adjective': 'い-adjective', 'na-adjective': 'な-adjective', noun: 'noun' } as const;
-
 /** How the word conjugates, with the forms used in the example sentences marked. */
 function renderForms(record: WordRecord): string {
   const conj = conjugate(record.word, record.pos);
@@ -67,16 +65,20 @@ function renderForms(record: WordRecord): string {
     ? `<tr><th scope="row">${f.label}</th><td lang="ja">${cell(i, 'plain')}</td><td lang="ja" class="pol">${cell(i, 'polite')}</td></tr>`
     : `<tr><th scope="row">${f.label}</th><td lang="ja" colspan="2">${cell(i, 'plain')}</td></tr>`).join('');
 
-  const used = matches.map(m => `<span lang="ja">${esc(m.text)}</span> (${conj.forms[m.form].label.toLowerCase()}${m.register === 'polite' ? ', polite' : ''})`);
+  // One entry per spelling: an ichidan verb's 〜られる is both potential and passive.
+  const names = new Map<string, string[]>();
+  for (const m of matches) {
+    const name = conj.forms[m.form].label.toLowerCase() + (m.register === 'polite' ? ', polite' : '');
+    names.set(m.text, [...(names.get(m.text) ?? []), name]);
+  }
+  const used = [...names].map(([text, n]) => `<span lang="ja">${esc(text)}</span> (${n.join(' or ')})`);
   const note = used.length
     ? `In the sentence${record.examples.length > 1 ? 's' : ''}: ${used.join(', ')}.`
-    : conj.cls === 'noun'
-      ? 'Nouns change form through だ and です, the copula.'
-      : `Every ${CLASS_NAME[conj.cls]} follows this pattern.`;
+    : esc(conj.pattern);
 
   return `
     <div class="forms">
-      <h3>Forms <span>${CLASS_NAME[conj.cls]}</span></h3>
+      <h3>Forms <span>${conj.className}</span></h3>
       <p class="forms-note">${note}</p>
       <table>
         <thead><tr><td></td><th scope="col">Plain</th><th scope="col">Polite</th></tr></thead>
