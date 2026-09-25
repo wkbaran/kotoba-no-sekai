@@ -77,14 +77,14 @@ function renderForms(record: WordRecord): string {
     : esc(conj.pattern);
 
   return `
-    <div class="forms">
-      <h3>Forms <span>${conj.className}</span></h3>
+    <details class="forms" data-forms>
+      <summary><h3>Forms <span>${conj.className}</span></h3></summary>
       <p class="forms-note">${note}</p>
       <table>
         <thead><tr><td></td><th scope="col">Plain</th><th scope="col">Polite</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </details>`;
 }
 
 function renderCard(record: WordRecord, index: number, total: number, isReview: boolean, base: string): string {
@@ -300,7 +300,15 @@ ${pageHead(`言葉の世界 ${longDate(date)}`)}
 
   /* ── Forms: how the word conjugates; the form from the sentence is marked like the word in it ── */
   .forms { margin-top: 3rem; }
-  .forms h3 { font-size: 1rem; font-weight: 700; padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+  /* Closed by default; the open/closed choice is remembered across words and days. */
+  .forms summary { list-style: none; cursor: pointer; padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+  .forms summary::-webkit-details-marker { display: none; }
+  .forms h3 { display: flex; align-items: baseline; font-size: 1rem; font-weight: 700; }
+  .forms h3::after { content: ""; width: .45rem; height: .45rem; margin-left: auto; align-self: center;
+    border-right: 1.5px solid var(--sub); border-bottom: 1.5px solid var(--sub); transform: translateY(-25%) rotate(45deg); transition: transform .15s; }
+  .forms[open] h3::after { transform: translateY(25%) rotate(-135deg); }
+  .forms summary:hover h3, .forms summary:hover h3 span { color: var(--ink); }
+  .forms summary:hover h3::after { border-color: var(--signal); }
   .forms h3 span { font-weight: 400; color: var(--sub); margin-left: .5rem; }
   .forms-note { margin: .9rem 0 .4rem; font-size: .92rem; color: var(--sub); max-width: 36em; }
   .forms-note span { color: var(--ink); font-weight: 700; }
@@ -493,6 +501,18 @@ ${pageHead(`言葉の世界 ${longDate(date)}`)}
     showFuri();
   });
   showFuri();
+
+  /* ── Forms table open/closed, remembered ── */
+  var formsOpen = false;
+  try { formsOpen = localStorage.getItem('kotoba-forms') === 'open'; } catch (e) {}
+  document.querySelectorAll('[data-forms]').forEach(function (d) { d.open = formsOpen; });
+  // toggle doesn't bubble, so listen in the capture phase.
+  document.addEventListener('toggle', function (e) {
+    if (!e.target.matches || !e.target.matches('[data-forms]') || e.target.open === formsOpen) return;
+    formsOpen = e.target.open;
+    try { localStorage.setItem('kotoba-forms', formsOpen ? 'open' : 'closed'); } catch (x) {}
+    document.querySelectorAll('[data-forms]').forEach(function (d) { d.open = formsOpen; });
+  }, true);
 
   /* Furigana tap-to-reveal on touch: with furigana off, the first tap on a
      linked word shows its reading instead of following the link; a second
