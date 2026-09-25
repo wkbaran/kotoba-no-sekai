@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { WordRecord } from '../types.js';
 import { resolveOutputPath } from '../config.js';
+import { conjugate, findForms } from '../conjugation.js';
 import { esc, longDate, shortDate, pageHead, BASE_CSS, siteHeader, siteFooter, hasCustomRuns } from './theme.js';
 
 // Daily digest page: one word at a time, reading and meaning hidden until
@@ -47,6 +48,42 @@ function readingHint(reading: string): string {
 }
 
 const PLAY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>';
+
+const CLASS_NAME = { 'i-adjective': 'い-adjective', 'na-adjective': 'な-adjective', noun: 'noun' } as const;
+
+/** How the word conjugates, with the forms used in the example sentences marked. */
+function renderForms(record: WordRecord): string {
+  const conj = conjugate(record.word, record.pos);
+  if (!conj) return '';
+  const matches = findForms(conj, record.examples.map(e => e.plain));
+
+  const cell = (i: number, register: 'plain' | 'polite') => {
+    const spellings = conj.forms[i][register];
+    if (!spellings) return '';
+    const hit = matches.find(m => m.form === i && m.register === register);
+    return hit ? `<mark>${esc(hit.text)}</mark>` : esc(spellings[0]);
+  };
+  const rows = conj.forms.map((f, i) => f.polite
+    ? `<tr><th scope="row">${f.label}</th><td lang="ja">${cell(i, 'plain')}</td><td lang="ja" class="pol">${cell(i, 'polite')}</td></tr>`
+    : `<tr><th scope="row">${f.label}</th><td lang="ja" colspan="2">${cell(i, 'plain')}</td></tr>`).join('');
+
+  const used = matches.map(m => `<span lang="ja">${esc(m.text)}</span> (${conj.forms[m.form].label.toLowerCase()}${m.register === 'polite' ? ', polite' : ''})`);
+  const note = used.length
+    ? `In the sentence${record.examples.length > 1 ? 's' : ''}: ${used.join(', ')}.`
+    : conj.cls === 'noun'
+      ? 'Nouns change form through だ and です, the copula.'
+      : `Every ${CLASS_NAME[conj.cls]} follows this pattern.`;
+
+  return `
+    <div class="forms">
+      <h3>Forms <span>${CLASS_NAME[conj.cls]}</span></h3>
+      <p class="forms-note">${note}</p>
+      <table>
+        <thead><tr><td></td><th scope="col">Plain</th><th scope="col">Polite</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
 
 function renderCard(record: WordRecord, index: number, total: number, isReview: boolean, base: string): string {
   const src = sourceName(record.sourceUrl);
@@ -120,6 +157,7 @@ function renderCard(record: WordRecord, index: number, total: number, isReview: 
         ${saved ? `<button type="button" class="linkish" data-saved="${esc(saved)}" data-src="${esc(record.sourceUrl)}">Saved copy</button>` : ''}
       </p>
     </div>
+${renderForms(record)}
   </section>`;
 }
 
@@ -258,6 +296,19 @@ ${pageHead(`言葉の世界 ${longDate(date)}`)}
   .jp mark { background: var(--wash); color: var(--ink); font-weight: 700; padding: 0 .12em; border-radius: 2px; box-shadow: inset 0 -2px 0 var(--signal); }
   .jp mark rt { color: var(--signal); }
 
+  /* ── Forms: how the word conjugates; the form from the sentence is marked like the word in it ── */
+  .forms { margin-top: 3rem; }
+  .forms h3 { font-size: 1rem; font-weight: 700; padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+  .forms h3 span { font-weight: 400; color: var(--sub); margin-left: .5rem; }
+  .forms-note { margin: .9rem 0 .4rem; font-size: .92rem; color: var(--sub); max-width: 36em; }
+  .forms-note span { color: var(--ink); font-weight: 700; }
+  .forms table { border-collapse: collapse; width: 100%; max-width: 38rem; }
+  .forms th, .forms td { text-align: left; padding: .55rem 1rem .55rem 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+  .forms thead th { font-size: .8rem; font-weight: 500; color: var(--muted); padding-top: .3rem; }
+  .forms tbody th { font-size: .88rem; font-weight: 500; color: var(--sub); white-space: nowrap; width: 8.5rem; }
+  .forms tbody td { font-size: 1.12rem; }
+  .forms mark { background: var(--wash); color: var(--ink); font-weight: 700; padding: 0 .12em; border-radius: 2px; box-shadow: inset 0 -2px 0 var(--signal); }
+
   /* ── Bottom bar: the thumb's-reach controls ── */
   .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: color-mix(in oklab, var(--ground) 88%, transparent);
     backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding: .7rem 0 calc(.7rem + env(safe-area-inset-bottom)); }
@@ -275,6 +326,13 @@ ${pageHead(`言葉の世界 ${longDate(date)}`)}
   @media (max-width: 640px) {
     .day { flex-wrap: wrap; margin-top: 1.25rem; }
     .answers { grid-template-columns: 1fr; }
+    /* Too narrow for three columns: the label goes above, plain and polite share a line or wrap. */
+    .forms thead { display: none; }
+    .forms tr { display: flex; flex-wrap: wrap; gap: .15rem 1.25rem; padding: .6rem 0; border-bottom: 1px solid var(--line); }
+    .forms th, .forms td { border: 0; padding: 0; }
+    .forms tbody th { flex-basis: 100%; width: auto; font-size: .8rem; }
+    .forms tbody td { font-size: 1.05rem; }
+    .forms .pol::before { content: "polite "; font-size: .75rem; color: var(--muted); }
     .bar .count, .bar kbd { display: none; }
     .bar .primary { flex: 1; min-width: 0; }
     .bar .wrap { padding: 0 .75rem; }

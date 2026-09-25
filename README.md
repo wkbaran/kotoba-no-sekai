@@ -66,6 +66,7 @@ Once a day the pipeline:
 - **One word at a time.** The reading and meaning stay covered until you ask, and the main button steps you through: show the reading, show the meaning, next word. Space does the same. A "Hide" button covers them again.
 - **A length hint.** The covered reading shows one circle per kana, with a smaller circle for small kana like ょ.
 - **Where it came up.** The real sentences from the article, with the word highlighted, furigana on tap or always on, the English behind a disclosure, and a link to the article (plus a saved copy in case the link dies).
+- **Forms.** Adjectives and nouns get a table of their plain and polite forms (negative, past, te-form and so on), with the form used in the sentence highlighted.
 - **Audio** at normal, slow and slower speeds. It falls back to the browser's own speech when there's no recording.
 - **Days and All words.** Every past day is on a calendar. All words can be searched in kanji, kana or English, filtered by JLPT level, and switched into a self-test with the English hidden.
 
