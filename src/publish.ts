@@ -39,6 +39,11 @@ function walk(dir: string): string[] {
   return out;
 }
 
+/** Drop trailing slashes, so "site/" and "site" both give the keys "site/index.html". */
+function cleanPrefix(prefix: string | undefined): string {
+  return (prefix ?? '').replace(/\/+$/, '');
+}
+
 function buildClient(config: AppConfig): { client: S3Client; bucket: string; prefix: string } {
   const pub = config.publish!;
 
@@ -60,7 +65,7 @@ function buildClient(config: AppConfig): { client: S3Client; bucket: string; pre
         credentials: { accessKeyId, secretAccessKey },
       }),
       bucket: r2Bucket,
-      prefix: r2.prefix ?? '',
+      prefix: cleanPrefix(r2.prefix),
     };
   }
 
@@ -76,7 +81,7 @@ function buildClient(config: AppConfig): { client: S3Client; bucket: string; pre
       region: s3?.region ?? process.env.AWS_REGION ?? 'us-east-1',
     }),
     bucket: s3Bucket,
-    prefix: s3?.prefix ?? '',
+    prefix: cleanPrefix(s3?.prefix),
   };
 }
 
@@ -103,7 +108,9 @@ export async function publishOutput(config: AppConfig): Promise<void> {
   do {
     const resp = await client.send(new ListObjectsV2Command({
       Bucket: bucket,
-      Prefix: prefix || undefined,
+      // With the slash, prefix "site" does not also match "site-backup/..." or "site.txt",
+      // which the delete pass below would otherwise remove.
+      Prefix: prefix ? `${prefix}/` : undefined,
       ContinuationToken: token,
     }));
     for (const obj of resp.Contents ?? []) {

@@ -246,7 +246,7 @@ describe('publishOutput: prefix', () => {
     write(path.join(webDir, 'audio', 'a.mp3'), 'y');
     await publishOutput(configWith(s3({ prefix: 'kotoba' })));
     assert.deepEqual(putKeys(), ['kotoba/audio/a.mp3', 'kotoba/index.html']);
-    assert.equal(lists()[0].input.Prefix, 'kotoba');
+    assert.equal(lists()[0].input.Prefix, 'kotoba/', 'listed as a folder');
   });
 
   it('compares against, and deletes among, prefixed remote keys', async () => {
@@ -263,14 +263,31 @@ describe('publishOutput: prefix', () => {
     assert.equal(lists()[0].input.Prefix, undefined);
   });
 
-  // Known hazard, kept as a todo so it shows up in the report without failing the suite:
-  // the prefix is listed as a bare string, so "kotoba" also matches "kotoba-backup/...", and
-  // anything under it that is not a local file is deleted.
-  it('never touches keys that merely start with the prefix', { todo: 'ListObjectsV2 is called with Prefix "kotoba", not "kotoba/"' }, async () => {
+  it('never touches keys that merely start with the prefix', async () => {
     write(path.join(webDir, 'index.html'), 'x');
-    remote = [{ key: 'kotoba-backup/index.html', etag: 'b' }, { key: 'kotoba.txt', etag: 'c' }];
+    remote = [{ key: 'kotoba-backup/index.html', etag: 'b' }, { key: 'kotoba.txt', etag: 'c' }, { key: 'kotoba/old.html', etag: 'd' }];
     await publishOutput(configWith(s3({ prefix: 'kotoba' })));
-    assert.deepEqual(deleteKeys(), []);
+    assert.deepEqual(deleteKeys(), ['kotoba/old.html']);
+    assert.deepEqual(putKeys(), ['kotoba/index.html']);
+  });
+
+  it('treats "kotoba/" and "kotoba" alike', async () => {
+    write(path.join(webDir, 'index.html'), 'x');
+    remote = [{ key: 'kotoba/index.html', etag: md5('x') }, { key: 'kotoba/old.html', etag: 'd' }];
+    await publishOutput(configWith(s3({ prefix: 'kotoba///' })));
+    assert.equal(lists()[0].input.Prefix, 'kotoba/');
+    assert.deepEqual(putKeys(), [], 'no "kotoba//index.html"');
+    assert.deepEqual(deleteKeys(), ['kotoba/old.html']);
+  });
+
+  it('applies to R2 as well', async () => {
+    restoreEnv(); restoreEnv = setEnv({ CLOUDFLARE_R2_ACCESS_KEY_ID: 'id', CLOUDFLARE_R2_SECRET_ACCESS_KEY: 's' });
+    write(path.join(webDir, 'index.html'), 'x');
+    remote = [{ key: 'site-old/a.html', etag: 'b' }];
+    await publishOutput(configWith({ provider: 'r2', r2: { bucket: 'b', account_id: 'a', prefix: 'site/' } }));
+    assert.equal(lists()[0].input.Prefix, 'site/');
+    assert.deepEqual(putKeys(), ['site/index.html']);
+    assert.deepEqual(deletes(), []);
   });
 });
 
