@@ -69,7 +69,7 @@ docker compose -f docker/compose.yaml run --rm kotoba --publish      # upload to
 docker compose -f docker/compose.yaml run --rm kotoba --word 食べる
 ```
 
-The `kotoba-scheduler` container runs [supercronic](https://github.com/aptible/supercronic) on `docker/crontab`: the pipeline, then publish if it succeeded, daily at 06:00 in `TZ`. Edit the crontab and re-run `up -d --build` to change the schedule. A run missed while the container was down is not made up. `kotoba` is for one-off commands; don't run it while the scheduler is mid-run, since they share `kotoba.db`.
+The `kotoba-scheduler` container runs [supercronic](https://github.com/aptible/supercronic) on `docker/crontab`: the pipeline, then publish if it succeeded, daily at 05:00 in `TZ`. Edit the crontab and re-run `up -d --build` to change the schedule. A run missed while the container was down is not made up. `kotoba` is for one-off commands; don't run it while the scheduler is mid-run, since they share `kotoba.db`.
 
 Two files configure it, and neither goes into the image:
 

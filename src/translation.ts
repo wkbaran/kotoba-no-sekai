@@ -77,6 +77,15 @@ export async function translateSentence(
 
 // ── Ollama ────────────────────────────────────────────────
 
+// The Ollama server may be shared with other clients, so a request can wait behind
+// another model's work or a model swap. A 30s timeout with no retry lost a translation
+// on 2026-09-29 (Hindsight was using qwen on the same server); allow for both.
+const OLLAMA_TIMEOUT_MS = 120_000;
+const OLLAMA_MAX_ATTEMPTS = 3;
+const OLLAMA_RETRY_DELAY_MS = 5_000;
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
 async function translateOllama(sentence: string, config: AppConfig): Promise<string | null> {
   const { url, model } = config.translation.ollama;
 
@@ -85,33 +94,47 @@ async function translateOllama(sentence: string, config: AppConfig): Promise<str
     'Output only the translation with no explanation, no quotes, no punctuation changes beyond what is natural in English.\n\n' +
     sentence;
 
-  let res: Response;
-  try {
-    res = await fetch(`${url}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...ollamaAuthHeaders() },
-      body: JSON.stringify({ model, prompt, stream: false }),
-      signal: AbortSignal.timeout(30000),
-    });
-  } catch (err) {
-    console.warn(`[translation] Ollama request failed: ${(err as Error).message}`);
-    return null;
+  for (let attempt = 1; attempt <= OLLAMA_MAX_ATTEMPTS; attempt++) {
+    const retriable = attempt < OLLAMA_MAX_ATTEMPTS;
+    let failure: string;
+    let retry = true;
+
+    try {
+      const res = await fetch(`${url}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...ollamaAuthHeaders() },
+        body: JSON.stringify({ model, prompt, stream: false }),
+        signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
+      });
+
+      if (res.ok) {
+        const json = await res.json() as { response?: string; error?: string };
+        if (!json.error) return json.response?.trim() ?? null;
+        // e.g. model not found: retrying won't change the answer
+        failure = `error: ${json.error}`;
+        retry = false;
+      } else {
+        const body = await res.text();
+        failure = `HTTP ${res.status}: ${body.slice(0, 200)}`;
+        // Busy or overloaded servers are worth another try; other 4xx are not.
+        retry = res.status >= 500 || res.status === 429;
+      }
+    } catch (err) {
+      failure = `request failed: ${(err as Error).message}`;
+    }
+
+    if (!retry || !retriable) {
+      console.warn(`[translation] Ollama ${failure}`);
+      return null;
+    }
+    const delay = OLLAMA_RETRY_DELAY_MS * attempt;
+    console.warn(
+      `[translation] Ollama ${failure} (attempt ${attempt}/${OLLAMA_MAX_ATTEMPTS}), retrying in ${delay / 1000}s`
+    );
+    await sleep(delay);
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.warn(`[translation] Ollama HTTP ${res.status}: ${body.slice(0, 200)}`);
-    return null;
-  }
-
-  const json = await res.json() as { response?: string; error?: string };
-
-  if (json.error) {
-    console.warn(`[translation] Ollama error: ${json.error}`);
-    return null;
-  }
-
-  return json.response?.trim() ?? null;
+  return null;
 }
 
 // ── Translation markup ───────────────────────────────────

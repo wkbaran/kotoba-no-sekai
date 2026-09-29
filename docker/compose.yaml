@@ -44,7 +44,7 @@ x-common: &common
 
 services:
   # The scheduler: supercronic runs docker/crontab (the pipeline, then publish,
-  # daily at 06:00 in TZ).
+  # daily at 05:00 in TZ).
   kotoba-scheduler:
     <<: *common
     # Counts as a run for the healthcheck, so it is healthy from the start.
