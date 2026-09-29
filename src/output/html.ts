@@ -229,8 +229,6 @@ ${pageHead(`言葉の世界 ${longDate(date)}`)}
 
   .head { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
   .word { font-size: clamp(5rem, 24vw, 10.5rem); font-weight: 800; line-height: 1.05; letter-spacing: .02em; margin: .5rem 0 .25rem -.04em; }
-  /* Review words are drawn in outline: seen before, being traced again. */
-  .is-review .word { color: transparent; -webkit-text-stroke: clamp(1.5px, .45vw, 2.5px) var(--ink); }
   .say { width: 3.5rem; height: 3.5rem; border-radius: 50%; border: 1.5px solid var(--line-strong); background: none; cursor: pointer;
     display: grid; place-items: center; flex-shrink: 0; }
   .say svg, .ex-play svg { width: 40%; fill: currentColor; margin-left: 8%; }

@@ -212,6 +212,21 @@ describe('buildDigestPage: review word', () => {
   });
 });
 
+describe('buildDigestPage: review word styling', () => {
+  it('draws the review word in solid type, like any other word', () => {
+    const html = page([makeRecord()], makeRecord({ word: '飲む' }));
+    assert.ok(!html.includes('text-stroke'), 'no outline effect');
+    assert.ok(!/\.is-review\s+\.word/.test(html), 'no special styling for the review word');
+    assert.ok(!/\.word\s*\{[^}]*color:\s*transparent/.test(html));
+  });
+
+  it('still marks the review card with a label and a tab note', () => {
+    const html = page([makeRecord()], makeRecord({ word: '飲む' }));
+    assert.match(html, /<span class="review">Review from /);
+    assert.match(html, /\.tabs a\.is-review::after \{ content: "review"/);
+  });
+});
+
 describe('buildDigestPage: forms table', () => {
   it('is shown for a verb, with the forms used in the sentences marked', () => {
     const html = page([makeRecord({
