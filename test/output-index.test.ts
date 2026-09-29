@@ -307,25 +307,42 @@ describe('rebuildIndexOutput', () => {
     assert.deepEqual(manifest('manual-manifest.json'), []);
   });
 
-  // Known bug, kept as todos so they show up in the report without failing the suite: any
-  // digest-*.html that is not in manifest.json is treated as an automatic run, including the
-  // pages of custom runs (which live in manual-manifest.json). html.ts keeps the two apart
-  // when it links neighbouring days; the index code does not.
-  const leak = { todo: 'digest files of custom runs are imported into the automatic manifest' };
+  // A custom run's digest is a digest-<id>.html like any other, but it belongs to the custom
+  // manifest; the automatic chain must not pick it up (html.ts keeps the two apart as well).
   const customRun = () => {
     write(path.join(web, 'manual-manifest.json'), JSON.stringify([{ date: '2026-09-01', wordCount: 1, words: [{ word: '猫', definition: 'cat' }], file: 'digest-2026-09-01.html' }]));
     write(path.join(web, 'digest-2026-09-01.html'), 'x');
     write(path.join(web, 'digest-2026-09-02.html'), 'x');
   };
-  it('does not list a custom run as an automatic day when rebuilding', leak, () => {
+  it('does not list a custom run as an automatic day when rebuilding', () => {
     customRun();
     rebuildIndexOutput(web, data);
     assert.deepEqual(manifest().map(e => e.date), ['2026-09-02']);
+    assert.deepEqual(manifest('manual-manifest.json').map(e => e.date), ['2026-09-01']);
   });
-  it('does not list a custom run as an automatic day when writing a daily run', leak, () => {
+  it('does not list a custom run as an automatic day when writing a daily run', () => {
     customRun();
     writeIndexOutput([makeRecord()], '2026-09-03', web, 'auto', data);
     assert.deepEqual(manifest().map(e => e.date), ['2026-09-03', '2026-09-02']);
+  });
+  it('removes a custom run that an earlier version put in the automatic manifest', () => {
+    customRun();
+    write(path.join(web, 'manifest.json'), JSON.stringify([
+      { date: '2026-09-01', wordCount: 0, words: [], file: 'digest-2026-09-01.html' },
+      { date: '2026-09-02', wordCount: 0, words: [], file: 'digest-2026-09-02.html' },
+    ]));
+    writeIndexOutput([makeRecord()], '2026-09-03', web, 'auto', data);
+    assert.deepEqual(manifest().map(e => e.date), ['2026-09-03', '2026-09-02']);
+    write(path.join(web, 'manifest.json'), JSON.stringify([{ date: '2026-09-01', wordCount: 0, words: [], file: 'digest-2026-09-01.html' }]));
+    rebuildIndexOutput(web, data);
+    assert.deepEqual(manifest().map(e => e.date), ['2026-09-02']);
+  });
+  it('keeps a custom run\'s words on words.html and off the Days calendar', () => {
+    customRun();
+    saveWords('2026-09-01', [makeRecord({ word: '猫', reading: 'ねこ', definition: 'cat' })]);
+    rebuildIndexOutput(web, data);
+    assert.match(read(path.join(web, 'words.html')), /data-q="猫 ねこ cat"/);
+    assert.ok(!read(path.join(web, 'index.html')).includes('digest-2026-09-01.html'));
   });
 
   it('shows the empty state when there are no days', () => {

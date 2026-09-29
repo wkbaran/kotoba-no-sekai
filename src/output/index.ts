@@ -52,8 +52,18 @@ function saveManifest(outputDir: string, mode: RunMode, entries: ManifestEntry[]
   fs.writeFileSync(manifestPath(outputDir, mode), JSON.stringify(entries, null, 2), 'utf8');
 }
 
+/**
+ * Ids of custom runs. Their digests sit beside the automatic ones as digest-<id>.html, so
+ * scanning the directory for digests must skip them (html.ts keeps the two chains apart too).
+ */
+function customIds(outputDir: string): Set<string> {
+  return new Set(loadManifest(outputDir, 'manual').map(e => e.date));
+}
+
 function upsertManifest(outputDir: string, mode: RunMode, entry: ManifestEntry): ManifestEntry[] {
-  const entries = loadManifest(outputDir, mode).filter(e => e.date !== entry.date);
+  const custom = mode === 'auto' ? customIds(outputDir) : new Set<string>();
+  // Also drops custom runs that an earlier version imported into the automatic manifest.
+  const entries = loadManifest(outputDir, mode).filter(e => e.date !== entry.date && !custom.has(e.date));
   entries.push(entry);
 
   // For auto runs: also pick up any digest-*.html files on disk not yet in the manifest
@@ -63,7 +73,7 @@ function upsertManifest(outputDir: string, mode: RunMode, entry: ManifestEntry):
       const known = new Set(entries.map(e => e.date));
       for (const f of fs.readdirSync(resolvedDir)) {
         const m = f.match(/^digest-(\d{4}-\d{2}-\d{2}(?:-\d+)?)\.html$/);
-        if (m && !known.has(m[1])) {
+        if (m && !known.has(m[1]) && !custom.has(m[1])) {
           entries.push({ date: m[1], wordCount: 0, words: [], file: f });
           known.add(m[1]);
         }
@@ -506,15 +516,16 @@ export function rebuildIndexOutput(outputDir: string, jsonOutputDir: string): vo
 
   for (const mode of ['auto', 'manual'] as RunMode[]) {
     // Remove entries whose digest file no longer exists on disk
+    const custom = mode === 'auto' ? customIds(outputDir) : new Set<string>();
     let entries = loadManifest(outputDir, mode)
-      .filter(e => fs.existsSync(path.join(resolvedDir, e.file)));
+      .filter(e => fs.existsSync(path.join(resolvedDir, e.file)) && !custom.has(e.date));
     const known = new Set(entries.map(e => e.date));
 
     if (mode === 'auto') {
       try {
         for (const f of fs.readdirSync(resolvedDir)) {
           const m = f.match(/^digest-(\d{4}-\d{2}-\d{2}(?:-\d+)?)\.html$/);
-          if (m && !known.has(m[1])) {
+          if (m && !known.has(m[1]) && !custom.has(m[1])) {
             entries.push({ date: m[1], file: f, ...loadWordsFromJson(jsonOutputDir, m[1]) });
             known.add(m[1]);
           }
