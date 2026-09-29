@@ -18,7 +18,7 @@ function kotoba(args: string[], env: Record<string, string> = {}): Promise<Resul
   for (const k of ['OLLAMA_HOST', 'OLLAMA_MODEL', 'OLLAMA_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ELEVENLABS_API_KEY', 'DEBUG']) delete clean[k];
   return new Promise(resolve => {
     execFile(
-      process.execPath, ['--require', './test/register.cjs', 'src/index.ts', ...args],
+      process.execPath, ['--require', './scripts/register.cjs', 'src/index.ts', ...args],
       { cwd: ROOT, env: { ...clean, TS_NODE_TRANSPILE_ONLY: '1', ...env }, timeout: 60_000 },
       (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout, stderr }),
     );

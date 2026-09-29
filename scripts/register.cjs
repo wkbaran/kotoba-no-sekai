@@ -1,4 +1,4 @@
-// Loaded with `node --require` before the tests. The sources import their
+// Loaded with `node --require` by `npm run dev` and `npm test`. The sources import their
 // siblings as './x.js' (as tsc's output needs), but ts-node's CommonJS hook
 // does not map that back to x.ts, so retry a missing relative .js import
 // without the extension and let ts-node resolve the .ts file.
