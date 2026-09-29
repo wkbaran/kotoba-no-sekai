@@ -183,15 +183,13 @@ describe('writeMarkdownOutput', () => {
       assert.equal(label('Conjunction'), 'Conjunction');
     });
 
-    // Known bug, kept as todos so they show up in the report without failing the suite.
-    // The label table is searched in order with a substring test, so 'Verb' also claims
-    // "Adverb" and "Suru verb", and 'Adjective' also claims "Na-adjective" and "I-adjective";
-    // the more specific entries after them can never be reached.
-    const todo = { todo: 'posLabel tries "Verb" before the more specific labels' };
-    it('labels an adverb "adv."', todo, () => assert.equal(label('Adverb (fukushi)'), 'adv.'));
-    it('labels a suru verb "v. (suru)"', todo, () => assert.equal(label('Suru verb - included'), 'v. (suru)'));
-    it('labels a な-adjective "adj. (な)"', todo, () => assert.equal(label('Na-adjective (keiyodoshi)'), 'adj. (な)'));
-    it('labels an い-adjective "adj. (い)"', todo, () => assert.equal(label('I-adjective (keiyoushi)'), 'adj. (い)'));
+    // The table is matched in order by substring, so specific names must beat general ones:
+    // "Adverb" contains "verb", and "Na-adjective" contains "adjective".
+    it('labels an adverb "adv."', () => assert.equal(label('Adverb (fukushi)'), 'adv.'));
+    it('labels an adverb taking a particle "adv."', () => assert.equal(label("Adverb taking the 'to' particle"), 'adv.'));
+    it('labels a suru verb "v. (suru)"', () => assert.equal(label('Suru verb - included'), 'v. (suru)'));
+    it('labels a な-adjective "adj. (な)"', () => assert.equal(label('Na-adjective (keiyodoshi)'), 'adj. (な)'));
+    it('labels an い-adjective "adj. (い)"', () => assert.equal(label('I-adjective (keiyoushi)'), 'adj. (い)'));
   });
 });
 

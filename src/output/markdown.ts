@@ -3,18 +3,22 @@ import type { WordRecord } from '../types.js';
 import { resolveOutputPath } from '../config.js';
 import { ATTRIBUTION_MARKDOWN } from './attribution.js';
 
+// Matched in order by substring, so the more specific names must come first:
+// "Adverb" contains "verb", and "Na-adjective" contains "adjective".
+const POS_LABELS: Array<[string, string]> = [
+  ['Suru verb', 'v. (suru)'],
+  ['Na-adjective', 'adj. (な)'],
+  ['I-adjective', 'adj. (い)'],
+  ['Adverb', 'adv.'],
+  ['Noun', 'n.'],
+  ['Verb', 'v.'],
+  ['Adjective', 'adj.'],
+];
+
 function posLabel(pos: string): string {
-  const map: Record<string, string> = {
-    'Noun': 'n.',
-    'Verb': 'v.',
-    'Adjective': 'adj.',
-    'Adverb': 'adv.',
-    'Suru verb': 'v. (suru)',
-    'Na-adjective': 'adj. (な)',
-    'I-adjective': 'adj. (い)',
-  };
-  for (const [key, abbr] of Object.entries(map)) {
-    if (pos.toLowerCase().includes(key.toLowerCase())) return abbr;
+  const lower = pos.toLowerCase();
+  for (const [key, abbr] of POS_LABELS) {
+    if (lower.includes(key.toLowerCase())) return abbr;
   }
   return pos;
 }
