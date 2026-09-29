@@ -11,7 +11,9 @@
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "dev": "ts-node src/index.ts",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "node --require ./test/register.cjs --test test/*.test.ts",
+    "test:coverage": "node --require ./test/register.cjs --test --experimental-test-coverage --test-coverage-include=\"src/**\" test/*.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cloudfront": "^3.1014.0",

@@ -93,6 +93,7 @@ To study a word you choose, run `npm start -- --word 食べる`. [CLI](docs/CLI.
 - [CLI](docs/CLI.md): commands, output files, how words are chosen, and the data format
 - [Configuration](docs/CONFIGURATION.md): `config.yaml`, `sources.yaml` and environment variables
 - [Publishing](docs/PUBLISHING.md): S3 or R2 hosting, the daily scheduled run, and Docker
+- [Testing](docs/TESTING.md): running the test suite, what it covers, and how to write tests for it
 
 ## License
 
