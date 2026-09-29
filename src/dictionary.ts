@@ -90,16 +90,23 @@ const JISHO_MAX_TOTAL_FAILURES = 20;
 export class JishoUnavailableError extends Error {}
 
 let nextRequestAt = 0;
+/** End of the most recent 429 wait; a request may not start before it. */
+let rateLimitedUntil = 0;
 let consecutiveFailures = 0;
 let totalFailures = 0;
 let unavailable: JishoUnavailableError | null = null;
 
 /** Wait for the next request slot, reserving it first so concurrent callers never share one. */
 async function throttle(delayMs: number): Promise<void> {
-  const now = Date.now();
-  const startAt = Math.max(now, nextRequestAt);
-  nextRequestAt = startAt + Math.max(delayMs, JISHO_MIN_INTERVAL_MS);
-  await sleep(startAt - now);
+  for (;;) {
+    const now = Date.now();
+    const startAt = Math.max(now, nextRequestAt);
+    nextRequestAt = startAt + Math.max(delayMs, JISHO_MIN_INTERVAL_MS);
+    await sleep(startAt - now);
+    // A 429 that arrived while we slept may have moved the hold past our slot. Reserve again,
+    // behind it, so a caller that queued before the 429 does not send into the rate limit.
+    if (rateLimitedUntil <= startAt) return;
+  }
 }
 
 /** Log a failed lookup; throws JishoUnavailableError once the failure limits are reached. */
@@ -150,7 +157,8 @@ export async function lookupWord(
     if (res.status === 429 && attempt < JISHO_RATE_LIMIT_RETRIES) {
       const waitMs = retryWaitMs(res, attempt);
       console.warn(`[dict] Jisho rate limit hit (429) for "${word}"; backing off ${Math.round(waitMs / 1000)}s`);
-      nextRequestAt = Math.max(nextRequestAt, Date.now() + waitMs);
+      rateLimitedUntil = Date.now() + waitMs;
+      nextRequestAt = Math.max(nextRequestAt, rateLimitedUntil);
       continue;
     }
 

@@ -239,6 +239,43 @@ describe('lookupWord: rate limiting (429)', () => {
     assert.ok(times[2] - times[0] >= 30_000 - SLACK, `third request at +${times[2] - times[0]}`);
   });
 
+  it('holds back a caller that reserved its slot before the 429 arrived', async () => {
+    const sent: Array<[string, number]> = [];
+    install((c, n) => {
+      sent.push([decodeURIComponent(c.url.split('=')[1]), Date.now()]);
+      return n === 0 ? textResponse('', 429, { 'retry-after': '30' }) : jisho(entry());
+    });
+    const { lookupWord } = freshDictionary();
+    // Both reserve a slot up front: 'a' at 0, 'b' at 1.25s. 'a' is then rate limited.
+    await drive(Promise.all([lookupWord('a', 0), lookupWord('b', 0)]));
+    assert.equal(sent.length, 3);
+    const [first, ...rest] = sent;
+    assert.equal(first[0], 'a');
+    for (const [word, at] of rest) assert.ok(at - first[1] >= 30_000 - SLACK, `${word} sent at +${at - first[1]}`);
+    const times = rest.map(([, at]) => at).sort((x, y) => x - y);
+    assert.ok(times[1] - times[0] >= 1250 - SLACK, 'still spaced apart after the wait');
+  });
+
+  it('holds back several queued callers, one slot apart', async () => {
+    const times: number[] = [];
+    install((_c, n) => { times.push(Date.now()); return n === 0 ? textResponse('', 429, { 'retry-after': '10' }) : jisho(entry()); });
+    const { lookupWord } = freshDictionary();
+    await drive(Promise.all(['a', 'b', 'c', 'd'].map(w => lookupWord(w, 0))));
+    assert.equal(times.length, 5, 'four lookups and one retry');
+    for (const t of times.slice(1)) assert.ok(t - times[0] >= 10_000 - SLACK, `sent at +${t - times[0]}`);
+    const rest = times.slice(1).sort((x, y) => x - y);
+    for (let i = 1; i < rest.length; i++) assert.ok(rest[i] - rest[i - 1] >= 1250 - SLACK, `gap ${rest[i] - rest[i - 1]}`);
+  });
+
+  it('does not delay a retry that no one queued behind', async () => {
+    const times: number[] = [];
+    install((_c, n) => { times.push(Date.now()); return n === 0 ? textResponse('', 429, { 'retry-after': '10' }) : jisho(entry()); });
+    const { lookupWord } = freshDictionary();
+    await drive(lookupWord('a', 0));
+    assert.ok(times[1] - times[0] >= 10_000 - SLACK);
+    assert.ok(times[1] - times[0] < 10_000 + 100, `waited ${times[1] - times[0]}`);
+  });
+
   it('gives up after three retries and counts a failure', async () => {
     const m = install(() => textResponse('', 429, { 'retry-after': '1' }));
     const { lookupWord } = freshDictionary();
