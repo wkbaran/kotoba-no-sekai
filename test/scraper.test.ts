@@ -130,12 +130,23 @@ describe('scrapeArticleText: archival text', () => {
     assert.ok(r.text.length > 5000);
   });
 
-  // Known bug, kept as a todo so it shows up in the report without failing the suite: the
-  // "already inside a block" check looks at every ancestor in the page, not just those inside
-  // the article. Since the archival selector includes <div>, an article inside any wrapper
-  // <div> loses the segmentation: headings and lists leak in and paragraphs join with one \n.
-  it('excludes headings and lists even when the article sits inside a wrapper div', { todo: 'extractBlockTexts checks ancestors outside the container' }, async () => {
+  it('excludes headings and lists even when the article sits inside a wrapper div', async () => {
     const r = await scrape(page(`<div class="page"><article><h1>見出しがここに入ります</h1><p>${P1}</p><ul><li>リストの項目がここにあります</li></ul><p>${P2}</p></article></div>`));
+    assert.equal(r.archivalText, `${P1}\n\n${P2}`);
+  });
+
+  it('gives the same archival text however deeply the page wraps the article', async () => {
+    const inner = `<article><h1>見出しがここに入ります</h1><p>${P1}</p><p>${P2}</p></article>`;
+    const plain = await scrape(page(inner));
+    await server?.close();
+    const wrapped = await scrape(page(`<div><div><section><div id="x">${inner}</div></section></div></div>`));
+    assert.equal(wrapped.archivalText, plain.archivalText);
+    assert.equal(wrapped.text, plain.text);
+  });
+
+  it('still collects only an outer block, not the blocks nested inside it', async () => {
+    const r = await scrape(page(`<div class="page"><article><blockquote><p>${P1}</p></blockquote><p>${P2}</p></article></div>`));
+    assert.equal(r.text, `${P1}\n\n${P2}`);
     assert.equal(r.archivalText, `${P1}\n\n${P2}`);
   });
 });

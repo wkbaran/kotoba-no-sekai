@@ -105,8 +105,10 @@ function extractBlockTexts($: ReturnType<typeof cheerio.load>, container: any, s
   container.find(selector).each((_: number, el: cheerio.BasicAcceptedElems<any>) => {
     const $el = $(el);
     // Skip elements nested inside another block we'll collect, to avoid duplicates
-    // (e.g. <p> inside <blockquote> — collect only the outer block)
-    if ($el.parents(selector).length > 0) return;
+    // (e.g. <p> inside <blockquote> — collect only the outer block). Only ancestors
+    // inside the container count: an article wrapped in a page-level <div> must not
+    // make every one of its paragraphs look nested.
+    if ($el.parentsUntil(container).filter(selector).length > 0) return;
     const text = cleanText($el.text());
     if (text.length >= 10) segments.push(text);
   });
