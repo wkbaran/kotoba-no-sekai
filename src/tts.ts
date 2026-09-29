@@ -42,9 +42,10 @@ export interface TtsResult {
   wordAudioFile: string;
   wordAudioFileSlow?: string;
   wordAudioFileVslow?: string;
-  exampleAudioFiles: string[];
-  exampleAudioFilesSlow: string[];
-  exampleAudioFilesVslow: string[];
+  /** One entry per example, in order; undefined where that file could not be generated. */
+  exampleAudioFiles: Array<string | undefined>;
+  exampleAudioFilesSlow: Array<string | undefined>;
+  exampleAudioFilesVslow: Array<string | undefined>;
 }
 
 /**
@@ -93,18 +94,20 @@ export async function generateAudio(
   const wordSlow   = await gen(wordText, `${prefix}-word-slow.mp3`,  0.85);
   const wordVslow  = await gen(wordText, `${prefix}-word-vslow.mp3`, 0.7);
 
-  const exNormal: string[] = [];
-  const exSlow:   string[] = [];
-  const exVslow:  string[] = [];
+  // Indexed like record.examples: the pipeline attaches by position, so a failed file
+  // must leave a gap and not let a later example's audio slide into its place.
+  const exNormal: Array<string | undefined> = [];
+  const exSlow:   Array<string | undefined> = [];
+  const exVslow:  Array<string | undefined> = [];
 
   for (let i = 0; i < record.examples.length; i++) {
     const text = record.examples[i].plain;
     const n = await gen(text, `${prefix}-ex${i}.mp3`,       1.0);
     const s = await gen(text, `${prefix}-ex${i}-slow.mp3`,  0.85);
     const v = await gen(text, `${prefix}-ex${i}-vslow.mp3`, 0.7);
-    if (n) exNormal.push(n);
-    if (s) exSlow.push(s);
-    if (v) exVslow.push(v);
+    exNormal.push(n);
+    exSlow.push(s);
+    exVslow.push(v);
   }
 
   return {

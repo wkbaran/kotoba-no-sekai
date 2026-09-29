@@ -155,7 +155,7 @@ describe('generateAudio: OpenAI', () => {
     assert.equal(r?.wordAudioFile, 'audio/s-0-word.mp3');
     assert.equal(r?.wordAudioFileSlow, 'audio/s-0-word-slow.mp3');
     assert.equal(r?.wordAudioFileVslow, undefined);
-    assert.deepEqual(r?.exampleAudioFilesVslow, []);
+    assert.deepEqual(r?.exampleAudioFilesVslow, [undefined, undefined], 'a gap per example, not a shorter list');
     assert.equal(r?.exampleAudioFiles.length, 2);
   });
 
@@ -172,18 +172,26 @@ describe('generateAudio: OpenAI', () => {
     assert.match(con.warn.join('\n'), /Failed "s-0-word\.mp3"/);
   });
 
-  // Known bug, kept as a todo so it shows up in the report without failing the suite:
-  // each list only receives the files that succeeded, so when an early example fails the
-  // later examples' files shift up, and the pipeline (which assigns by index) attaches
-  // example 2's audio to example 1.
-  it('keeps each example\'s audio aligned when an earlier one fails', { todo: 'result arrays are compacted, so indexes shift' }, async () => {
+  // The pipeline attaches audio to examples by index, so a failure must leave a gap.
+  it('keeps each example\'s audio aligned when an earlier one fails', async () => {
     install(c => {
       const { input, speed } = c.body as { input: string; speed: number };
       return input === '一つ目の文です。' && speed === 1 ? textResponse('no', 400) : audioResponse();
     });
     const r = await generateAudio(record(), 0, config, root, 's');
     assert.ok(r);
-    assert.ok(!r.exampleAudioFiles[0]?.includes('-ex1'), `example 1 got ${r.exampleAudioFiles[0]}`);
+    assert.deepEqual(r.exampleAudioFiles, [undefined, 'audio/s-0-ex1.mp3']);
+    assert.deepEqual(r.exampleAudioFilesSlow, ['audio/s-0-ex0-slow.mp3', 'audio/s-0-ex1-slow.mp3']);
+  });
+
+  it('leaves a gap in the slow list when only a slow file fails', async () => {
+    install(c => {
+      const { input, speed } = c.body as { input: string; speed: number };
+      return input === '二つ目の文です。' && speed === 0.85 ? textResponse('no', 400) : audioResponse();
+    });
+    const r = await generateAudio(record(), 0, config, root, 's');
+    assert.deepEqual(r?.exampleAudioFilesSlow, ['audio/s-0-ex0-slow.mp3', undefined]);
+    assert.equal(r?.exampleAudioFiles.length, 2);
   });
 });
 
