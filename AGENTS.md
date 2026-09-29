@@ -1,0 +1,11 @@
+# Notes for agents
+
+Surprises in this project that cost time. Add to this list when you hit another.
+
+- **Docker over `DOCKER_HOST=ssh://...`:** bind-mount paths resolve on the Docker *host*, not on the machine running compose, so `../output` would mount an empty directory there. `docker/compose.yaml` therefore requires an absolute `KOTOBA_DIR` (in gitignored `docker/.env`). Data must be copied to that directory on the host first.
+- **`OLLAMA_*` belong in `docker/.env`, not `.env`:** the compose `environment:` block overrides `env_file` and is interpolated from `docker/.env`, so a value in `../.env` is silently ignored.
+- **`TZ` must be set in `.env` for Docker:** output filenames use the local date (`toLocaleDateString`), and the container runs in UTC.
+- **Windows checkouts have CRLF files.** Diff with `--strip-trailing-cr`, and strip `\r` before copying a `.env` (`tr -d '\r'`).
+- **`OLLAMA_HOST` means two things:** for the Ollama *server* it is a bind address (`0.0.0.0` = listen on all interfaces); here it is the *client* URL (`applyEnvOverrides` in `src/config.ts`). A Windows user env var `OLLAMA_HOST=0.0.0.0`, set so other machines can reach Ollama, is inherited by a local pipeline run, which then dials `http://0.0.0.0:11434`. Windows refuses that, so translation logs "No translation provider available" and the site is published with no English. That is how translations vanished on 2026-09-25 (in Docker, `docker/.env` sets a real host, so it is unaffected).
+- **One scheduler at a time:** `output/kotoba.db` is the dedup state. The Windows task `KotobaPipeline` and a scheduler on nuc1 must not both run against separate copies.
+- **The scheduler is supercronic, not the image's ENTRYPOINT:** `kotoba-scheduler` overrides the entrypoint to run `docker/crontab`. One-off commands use the `kotoba` service (profile `tools`), which keeps the `node dist/index.js` entrypoint. The cron schedule is baked into the image, so changing it needs `up -d --build`.
