@@ -3,7 +3,7 @@
 ```bash
 npm test                # the whole suite, about 15 seconds
 npm run test:coverage   # the same, with a coverage report for src/
-node --require ./test/register.cjs --test test/db.test.ts   # one file
+node --require ./scripts/register.cjs --test test/db.test.ts   # one file
 ```
 
 The suite uses Node's built-in test runner (`node:test`) and the `ts-node` already in devDependencies, so there is nothing extra to install. It was written and run on Node 22; other versions are untested (the coverage flags and the mocked clock need reasonably recent Node releases). It never touches the network, `output/`, or your real database: every test works in a temporary directory and fakes `fetch` or serves from a local HTTP server.
@@ -30,14 +30,4 @@ The suite uses Node's built-in test runner (`node:test`) and the `ts-node` alrea
 - **Use temporary directories.** `tmpDir()` and `cleanupTmpDirs()` in `helpers.ts`. Configs from `makeConfig(root)` keep every path, including the database, inside `root` and switch off TTS and translation.
 - **Fake time, not sleeps.** Code that waits (Jisho's throttle, Ollama's retries) is tested with `mock.timers` and `drive()`, which advances the clock while a promise is waiting.
 - **Jisho's state is per process.** `dictionary.ts` counts failures at module level, so `dictionary.test.ts` loads a fresh copy per test. In `pipeline.test.ts` the outage test is last for the same reason.
-- **`todo` marks a known bug.** A test with `{ todo: '...' }` runs and is reported, but does not fail the suite. It asserts the behaviour the code should have, so it starts passing when the bug is fixed. Remove the `todo` then.
-
-## Known bugs the suite reports
-
-These are `todo` tests. `npm test` lists them as `# todo`.
-
-- `markdown.ts`: an adverb is labelled "v.", and the suru-verb, な-adjective and い-adjective labels can never appear, because the label table is matched in order by substring.
-- `scraper.ts`: `archivalText` keeps headings and list items, and joins paragraphs with one newline, when the article sits inside a wrapper `<div>`.
-- `tts.ts`: when an earlier example's audio fails, later examples' files shift up a slot, so the pipeline attaches the wrong audio to the wrong sentence.
-- `publish.ts`: the prefix is listed without a trailing slash, so with prefix `kotoba` the sync would also delete `kotoba-backup/...`.
-- `output/index.ts`: the digest of a custom (`--word`, `--source`, `--url`) run is imported into the automatic manifest when the index is written or rebuilt, and shows on the Days calendar as an empty day.
+- **`todo` marks a known bug.** When you find a bug you are not fixing right away, write a test for the behaviour the code should have and add `{ todo: '...' }`. It runs and is reported, but does not fail the suite, and it starts passing when the bug is fixed; remove the `todo` then. There are none at the moment.
