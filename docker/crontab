@@ -1,0 +1,5 @@
+# Read by supercronic in the scheduler container. Times are local to TZ (set it in .env).
+# Change the schedule here, then `docker compose -f docker/compose.yaml up -d --build`.
+#
+# min hour dom mon dow  command
+0 6 * * * /app/docker/run-and-publish.sh

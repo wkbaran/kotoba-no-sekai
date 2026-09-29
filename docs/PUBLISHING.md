@@ -59,12 +59,35 @@ Edit `$ProjectDir` at the top of the script to match where the repo lives.
 
 ### Docker
 
-The image builds the project and runs `dist/index.js`, with arguments passed straight through. `output/`, `config.yaml` and `sources.yaml` are mounted from the repo, so the database and site persist between runs.
+The image builds the project and runs `dist/index.js`, with arguments passed straight through. `KOTOBA_DIR` holds `output/`, `config.yaml` and `sources.yaml`, and the container mounts them, so the database and site persist between runs.
 
 ```bash
-docker compose -f docker/compose.yaml run --rm kotoba                # daily run
+docker compose -f docker/compose.yaml up -d --build                  # start the daily scheduler
+docker compose -f docker/compose.yaml logs -f
+docker compose -f docker/compose.yaml run --rm kotoba                # run once now
 docker compose -f docker/compose.yaml run --rm kotoba --publish      # upload to S3 or R2
 docker compose -f docker/compose.yaml run --rm kotoba --word 食べる
 ```
 
-Keys come from `.env`. Translation defaults to an Ollama server on the Docker host (`http://host.docker.internal:11434`); set `OLLAMA_HOST`, `OLLAMA_MODEL` or `OLLAMA_API_KEY` to point it elsewhere.
+The `kotoba-scheduler` container runs [supercronic](https://github.com/aptible/supercronic) on `docker/crontab`: the pipeline, then publish if it succeeded, daily at 06:00 in `TZ`. Edit the crontab and re-run `up -d --build` to change the schedule. A run missed while the container was down is not made up. `kotoba` is for one-off commands; don't run it while the scheduler is mid-run, since they share `kotoba.db`.
+
+Two files configure it, and neither goes into the image:
+
+- `.env` holds the app's keys. Set `TZ` here too (for example `TZ=America/Denver`). Output files are named by local date, and the container runs in UTC otherwise.
+- `docker/.env` holds `KOTOBA_DIR`, an absolute path to a directory on the Docker host, and any `OLLAMA_HOST`, `OLLAMA_MODEL` or `OLLAMA_API_KEY` overrides. They go here, not in `.env`, because compose's `environment:` block overrides `env_file`. Translation defaults to an Ollama server on the Docker host (`http://host.docker.internal:11434`).
+
+`KOTOBA_DIR` has no default on purpose. To run on the local Docker, point it at the repo (`KOTOBA_DIR=/path/to/kotoba-no-sekai`).
+
+#### On a remote Docker host
+
+Compose runs on your machine and talks to the host's Docker over ssh, so `.env` and `docker/.env` stay local. Copy `output/`, `config.yaml` and `sources.yaml` into `KOTOBA_DIR` on the host first, or the first run starts from an empty database:
+
+```bash
+export DOCKER_HOST=ssh://user@host
+ssh user@host 'mkdir -p ~/kotoba-no-sekai'
+rsync -rlt output/ user@host:kotoba-no-sekai/output/
+rsync config.yaml sources.yaml user@host:kotoba-no-sekai/
+docker compose -f docker/compose.yaml run --rm kotoba --dry-run     # writes nothing
+```
+
+The volumes carry `:z` so SELinux hosts such as Fedora CoreOS can read them. Other hosts ignore it. Run it from only one place: two copies of `output/kotoba.db` will teach the same words twice.

@@ -1,28 +1,73 @@
 # Usage (from repo root):
-#   docker compose -f docker/compose.yaml run --rm kotoba              # daily run
+#   docker compose -f docker/compose.yaml up -d --build                # start the daily scheduler
+#   docker compose -f docker/compose.yaml logs -f
+#   docker compose -f docker/compose.yaml run --rm kotoba              # run once now
 #   docker compose -f docker/compose.yaml run --rm kotoba --publish    # sync to S3/R2
 #   docker compose -f docker/compose.yaml run --rm kotoba --word 食べる
+#
+# Two files feed it, and neither is copied into the image:
+#   ../.env       the app's settings (API keys, AWS/S3, OLLAMA_HOST, TZ), passed to the container.
+#   docker/.env   KOTOBA_DIR, read by compose itself to fill in the volume paths below.
+#                 OLLAMA_* go here too (see `environment:`).
+# Compose reads both on the machine running it, so with DOCKER_HOST=ssh://user@host
+# they need not exist on the host.
+
+x-common: &common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  image: kotoba-no-sekai
+  init: true
+  env_file:
+    - path: ../.env
+      required: false
+  environment:
+    # LLM (Ollama API) used for sentence translation. Defaults to an Ollama
+    # server on the Docker host. OLLAMA_API_KEY is optional; when set it is
+    # sent as a Bearer token (for a proxied or hosted endpoint).
+    OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+  extra_hosts:
+    # Makes host.docker.internal resolve on Linux too.
+    - host.docker.internal:host-gateway
+  volumes:
+    # KOTOBA_DIR is an absolute path on the Docker host holding output/
+    # (kotoba.db, data/, web/), config.yaml and sources.yaml. It is required,
+    # with no default: with DOCKER_HOST set, a relative path would resolve on
+    # the machine running compose, the host would mount an empty directory, and
+    # the run would start from an empty database and publish an empty site.
+    # :z relabels for SELinux hosts (Fedora CoreOS); other hosts ignore it.
+    - ${KOTOBA_DIR:?set KOTOBA_DIR in docker/.env to an absolute path on the Docker host}/output:/app/output:z
+    - ${KOTOBA_DIR}/config.yaml:/app/config.yaml:ro,z
+    - ${KOTOBA_DIR}/sources.yaml:/app/sources.yaml:ro,z
 
 services:
+  # The scheduler: supercronic runs docker/crontab (the pipeline, then publish,
+  # daily at 06:00 in TZ).
+  kotoba-scheduler:
+    <<: *common
+    # Counts as a run for the healthcheck, so it is healthy from the start.
+    entrypoint: ["sh", "-c", "touch /tmp/last-run && exec supercronic /app/docker/crontab"]
+    restart: unless-stopped
+    # A run takes about half an hour. If `docker stop` cuts one off, the next
+    # day's publish syncs the whole site again.
+    stop_grace_period: 1m
+    # Healthy while the scheduler started, or a run finished, within 26 hours.
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/last-run -mmin -1560 | grep -q ."]
+      interval: 30m
+      timeout: 10s
+      retries: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # One-off CLI against the same data, e.g. `run --rm kotoba --word 食べる`.
+  # Never started by `up`: it needs the "tools" profile, which `run` turns on.
+  # Don't run it while the scheduler is mid-run; they share kotoba.db.
   kotoba:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: kotoba-no-sekai
-    env_file:
-      - path: ../.env
-        required: false
-    environment:
-      # LLM (Ollama API) used for sentence translation. Defaults to an Ollama
-      # server on the Docker host. OLLAMA_API_KEY is optional; when set it is
-      # sent as a Bearer token (for a proxied or hosted endpoint).
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
-    extra_hosts:
-      # Makes host.docker.internal resolve on Linux too.
-      - host.docker.internal:host-gateway
-    volumes:
-      - ../output:/app/output
-      - ../config.yaml:/app/config.yaml:ro
-      - ../sources.yaml:/app/sources.yaml:ro
+    <<: *common
+    profiles: ["tools"]
