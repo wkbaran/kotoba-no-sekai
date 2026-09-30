@@ -18,6 +18,7 @@ const MIME_TYPES: Record<string, string> = {
   '.json': 'application/json',
   '.md':   'text/markdown; charset=utf-8',
   '.mp3':  'audio/mpeg',
+  '.svg':  'image/svg+xml',
   '.txt':  'text/plain; charset=utf-8',
 };
 

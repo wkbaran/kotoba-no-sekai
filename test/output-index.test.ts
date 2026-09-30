@@ -28,6 +28,14 @@ describe('writeIndexOutput: daily runs', () => {
     assert.ok(!fs.existsSync(path.join(web, 'manual.html')));
   });
 
+  it('writes favicon.svg and links it from every page', () => {
+    writeIndexOutput([makeRecord()], '2026-09-01', web, 'auto', data);
+    assert.match(read(path.join(web, 'favicon.svg')), /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+    for (const page of ['index.html', 'words.html']) {
+      assert.match(read(path.join(web, page)), /<link rel="icon" href="favicon\.svg" type="image\/svg\+xml">/);
+    }
+  });
+
   it('shows the newest words with links into the digest', () => {
     writeIndexOutput([makeRecord({ word: '猫', definition: 'cat' }), makeRecord({ word: '犬', definition: 'dog' })], '2026-09-01', web, 'auto', data);
     const html = read(path.join(web, 'index.html'));

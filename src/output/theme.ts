@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { resolveOutputPath } from '../config.js';
 import { ATTRIBUTION_HTML } from './attribution.js';
 
 // Shared look for every published page: fonts, the palette switcher, colour
@@ -153,11 +154,31 @@ function paletteScript(): string {
 </script>`;
 }
 
+// Site icon: 言, drawn from rectangles so it needs no font, in the default
+// combination (166). The top stroke takes the signal colour.
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="14" fill="#112f2c"/>
+<g fill="#fbe6a0">
+<rect x="10" y="17" width="44" height="6" rx="1.5"/>
+<rect x="17" y="27" width="30" height="5" rx="1.5"/>
+<rect x="17" y="36" width="30" height="5" rx="1.5"/>
+<path fill-rule="evenodd" d="M17 45h30v13H17zM22.5 49.5v4h19v-4z"/>
+</g>
+<rect x="28.5" y="6" width="7" height="8" rx="2" fill="#f48067"/>
+</svg>
+`;
+
+/** Writes favicon.svg next to the pages, which link to it from pageHead. */
+export function writeFavicon(outputDir: string): void {
+  fs.writeFileSync(resolveOutputPath(outputDir, 'favicon.svg'), FAVICON_SVG, 'utf8');
+}
+
 /** Everything in <head> before the page's own <style>. */
 export function pageHead(title: string): string {
   return `<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1:wght@300..900&display=swap" rel="stylesheet">

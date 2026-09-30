@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { WordRecord } from '../types.js';
 import { resolveOutputPath } from '../config.js';
-import { esc, asDate, longDate, shortDate, pageHead, BASE_CSS, siteHeader, siteFooter, hasCustomRuns } from './theme.js';
+import { esc, asDate, longDate, shortDate, pageHead, BASE_CSS, siteHeader, siteFooter, hasCustomRuns, writeFavicon } from './theme.js';
 import type { NavPage } from './theme.js';
 
 // ── Types ─────────────────────────────────────────────────
@@ -465,6 +465,7 @@ export function buildMasterWordsIndex(outputDir: string, jsonDir = 'output/data'
   const indexPath = resolveOutputPath(outputDir, 'words.html');
   fs.writeFileSync(indexPath, html, 'utf8');
   console.log(`[output] Words index → ${indexPath} (${rows.length} word${rows.length !== 1 ? 's' : ''})`);
+  writeFavicon(outputDir);
 }
 
 // ── Public API ────────────────────────────────────────────
